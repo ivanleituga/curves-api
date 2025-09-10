@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Curves API - Visualizador de Perfis Compostos</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Header Principal -->
+    <header class="main-header">
+        <h1>Visualizador de Perfis Compostos</h1>
+        <p>Sistema de Geração de Perfis de Poços</p>
+    </header>
+
+    <div class="container">
+        <!-- Painel de Controles -->
+        <aside class="control-panel">
+            <h2>Parâmetros de Entrada</h2>
+            
+            <form id="profileForm">
+                <!-- Campo do Poço -->
+                <div class="form-group">
+                    <label for="wellInput">
+                        Nome do Poço
+                        <span class="required">*</span>
+                    </label>
+                    <input 
+                        type="text" 
+                        id="wellInput" 
+                        name="well"
+                        placeholder="Ex: 1-SL-1-RN"
+                        required
+                    >
+                    <small class="help-text">Digite o identificador do poço</small>
+                </div>
+
+                <!-- Seleção de Curvas -->
+                <div class="form-group">
+                    <label>
+                        Curvas
+                        <span class="required">*</span>
+                    </label>
+                    <div class="checkbox-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="curves" value="GR" checked>
+                            <span class="checkbox-text">GR (Gamma Ray)</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="curves" value="RHOB" checked>
+                            <span class="checkbox-text">RHOB (Densidade)</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="curves" value="NPHI">
+                            <span class="checkbox-text">NPHI (Porosidade)</span>
+                        </label>
+                    </div>
+                    <small class="help-text">Selecione pelo menos uma curva</small>
+                </div>
+
+                <!-- Checkbox Litologia -->
+                <div class="form-group">
+                    <label class="switch-label">
+                        <input type="checkbox" id="hasLitoInput" name="hasLito" checked>
+                        <span class="switch"></span>
+                        <span class="switch-text">Incluir Litologia</span>
+                    </label>
+                    <small class="help-text">Exibir coluna de litologia no perfil</small>
+                </div>
+
+                <!-- Botão Gerar -->
+                <button type="submit" id="generateBtn" class="btn-generate">
+                    <span id="btnText">Gerar Perfil</span>
+                    <span id="btnLoader" class="loader hidden"></span>
+                </button>
+            </form>
+
+            <!-- Status -->
+            <div class="status-panel">
+                <h3>Status</h3>
+                <div class="status-item">
+                    <span class="status-label">Estado:</span>
+                    <span id="statusText" class="status-value">Pronto</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Última atualização:</span>
+                    <span id="lastUpdate" class="status-value">-</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Área de Visualização -->
+        <main class="visualization-area">
+            <div class="viz-header">
+                <h2 id="vizTitle">Área de Visualização</h2>
+                <div class="viz-controls">
+                    <button id="downloadBtn" class="btn-action" disabled title="Download do perfil">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        Download
+                    </button>
+                    <button id="fullscreenBtn" class="btn-action" disabled title="Tela cheia">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+                        </svg>
+                        Expandir
+                    </button>
+                </div>
+            </div>
+
+            <div id="imageContainer" class="image-container">
+                <div class="placeholder">
+                    <svg width="150" height="150" viewBox="0 0 150 150">
+                        <rect width="150" height="150" fill="#e9ecef" rx="8"/>
+                        <line x1="30" y1="50" x2="120" y2="50" stroke="#adb5bd" stroke-width="2"/>
+                        <line x1="30" y1="75" x2="120" y2="75" stroke="#adb5bd" stroke-width="2"/>
+                        <line x1="30" y1="100" x2="120" y2="100" stroke="#adb5bd" stroke-width="2"/>
+                        <circle cx="75" cy="75" r="40" fill="none" stroke="#ced4da" stroke-width="2" stroke-dasharray="5,5"/>
+                    </svg>
+                    <p>Configure os parâmetros e clique em "Gerar Perfil"</p>
+                </div>
+            </div>
+
+            <!-- Mensagens de erro (oculto por padrão) -->
+            <div id="errorContainer" class="error-container hidden">
+                <div class="error-message">
+                    <strong>Erro:</strong>
+                    <span id="errorText"></span>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Footer -->
+    <footer class="main-footer">
+        <p>© 2025 Curves API - Visualizador de Perfis | Versão 1.0.0</p>
+        <button id="toggleDebug" class="btn-link">Debug</button>
+    </footer>
+
+    <!-- Painel de Debug (oculto por padrão) -->
+    <div id="debugPanel" class="debug-panel hidden">
+        <h3>Debug Console</h3>
+        <pre id="debugContent"></pre>
+        <button id="clearDebug" class="btn-link">Limpar</button>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
