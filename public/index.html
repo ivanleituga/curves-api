@@ -3,23 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Curves API - Visualizador de Perfis Compostos</title>
+    <title>Curves API - Visualizador de Perfis Compostos | K2 Sistemas</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <!-- Header Principal -->
+    <!-- Header Principal com Logo -->
     <header class="main-header">
-        <h1>Visualizador de Perfis Compostos</h1>
-        <p>Sistema de Geração de Perfis de Poços</p>
+        <div class="header-container">
+            <img src="logo-k2.png" alt="K2 Sistemas" class="company-logo">
+            <span class="header-divider"></span>
+            <div class="header-text">
+                <h1>Visualizador de Perfis Compostos</h1>
+                <p>Sistema de Geração de Perfis de Poços</p>
+            </div>
+        </div>
     </header>
 
     <div class="container">
-        <!-- Painel de Controles -->
+        <!-- Painel de Controles (Lateral Esquerdo) -->
         <aside class="control-panel">
             <h2>Parâmetros de Entrada</h2>
             
             <form id="profileForm">
-                <!-- Campo do Poço -->
+                <!-- Campo de Busca do Poço com Datalist -->
                 <div class="form-group">
                     <label for="wellInput">
                         Nome do Poço
@@ -29,33 +35,29 @@
                         type="text" 
                         id="wellInput" 
                         name="well"
-                        placeholder="Ex: 1-SL-1-RN"
+                        list="wells-list"
+                        placeholder="Digite para buscar... Ex: 1-SL"
+                        autocomplete="off"
                         required
                     >
-                    <small class="help-text">Digite o identificador do poço</small>
+                    <datalist id="wells-list">
+                        <!-- Preenchido dinamicamente pelo JavaScript -->
+                    </datalist>
+                    <small class="help-text">Digite o código ou selecione da lista</small>
                 </div>
 
-                <!-- Seleção de Curvas -->
+                <!-- Seleção de Curvas Dinâmica -->
                 <div class="form-group">
                     <label>
                         Curvas
                         <span class="required">*</span>
                     </label>
-                    <div class="checkbox-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="curves" value="GR" checked>
-                            <span class="checkbox-text">GR (Gamma Ray)</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="curves" value="RHOB" checked>
-                            <span class="checkbox-text">RHOB (Densidade)</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="curves" value="NPHI">
-                            <span class="checkbox-text">NPHI (Porosidade)</span>
-                        </label>
+                    <div id="curvesContainer" class="curves-container">
+                        <div class="placeholder-text">
+                            Selecione um poço primeiro
+                        </div>
                     </div>
-                    <small class="help-text">Selecione pelo menos uma curva</small>
+                    <small class="help-text">Selecione entre 1 e 3 curvas</small>
                 </div>
 
                 <!-- Checkbox Litologia -->
@@ -69,7 +71,7 @@
                 </div>
 
                 <!-- Botão Gerar -->
-                <button type="submit" id="generateBtn" class="btn-generate">
+                <button type="submit" id="generateBtn" class="btn-generate" disabled>
                     <span id="btnText">Gerar Perfil</span>
                     <span id="btnLoader" class="loader hidden"></span>
                 </button>
@@ -86,10 +88,28 @@
                     <span class="status-label">Última atualização:</span>
                     <span id="lastUpdate" class="status-value">-</span>
                 </div>
+                <div class="status-item">
+                    <span class="status-label">API:</span>
+                    <span id="apiStatus" class="status-value">Conectando...</span>
+                </div>
+            </div>
+
+            <!-- Link Gerado (oculto inicialmente) -->
+            <div id="linkPanel" class="link-panel hidden">
+                <h3>Link Compartilhável</h3>
+                <div class="link-container">
+                    <input type="text" id="generatedLink" readonly class="link-input">
+                    <button id="copyBtn" class="btn-copy" title="Copiar link">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                    </button>
+                </div>
             </div>
         </aside>
 
-        <!-- Área de Visualização -->
+        <!-- Área de Visualização (Lado Direito) -->
         <main class="visualization-area">
             <div class="viz-header">
                 <h2 id="vizTitle">Área de Visualização</h2>
@@ -136,7 +156,7 @@
 
     <!-- Footer -->
     <footer class="main-footer">
-        <p>© 2025 Curves API - Visualizador de Perfis | Versão 1.0.0</p>
+        <p>© 2025 K2 Sistemas - Visualizador de Perfis | Versão 2.0</p>
         <button id="toggleDebug" class="btn-link">Debug</button>
     </footer>
 
