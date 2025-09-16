@@ -1,6 +1,4 @@
-// ====================================
 // CONFIGURAÇÃO E ESTADO GLOBAL
-// ====================================
 const CONFIG = {
   API_URL: "/api",
   DEBUG_MODE: true
@@ -27,9 +25,7 @@ const state = {
   lastParams: null
 };
 
-// ====================================
 // ELEMENTOS DO DOM
-// ====================================
 const elements = {
   // Form
   form: document.getElementById("profileForm"),
@@ -67,9 +63,7 @@ const elements = {
   debugContent: document.getElementById("debugContent")
 };
 
-// ====================================
 // FUNÇÕES AUXILIARES
-// ====================================
 
 // Logger para debug
 function log(label, data = null) {
@@ -142,9 +136,7 @@ function updateURL() {
   log("URL atualizada", newURL);
 }
 
-// ====================================
 // INICIALIZAÇÃO
-// ====================================
 document.addEventListener("DOMContentLoaded", async () => {
   log("Iniciando aplicação");
   
@@ -163,9 +155,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   log("Aplicação inicializada");
 });
 
-// ====================================
 // VERIFICAR SAÚDE DA API
-// ====================================
 async function checkAPIHealth() {
   try {
     const response = await fetch(`${CONFIG.API_URL}/health`);
@@ -183,9 +173,7 @@ async function checkAPIHealth() {
   }
 }
 
-// ====================================
 // CARREGAR LISTA DE POÇOS
-// ====================================
 async function loadWells() {
   try {
     log("Carregando lista de poços");
@@ -207,9 +195,7 @@ async function loadWells() {
   }
 }
 
-// ====================================
 // CONFIGURAR EVENT LISTENERS
-// ====================================
 function setupEventListeners() {
   // Formulário
   elements.form.addEventListener("submit", generateProfile);
@@ -235,9 +221,7 @@ function setupEventListeners() {
   document.addEventListener("keydown", handleKeyPress);
 }
 
-// ====================================
 // MANIPULAR SELEÇÃO DE POÇO
-// ====================================
 function handleWellInput(e) {
   const value = e.target.value;
   
@@ -269,9 +253,7 @@ async function handleWellSelection(e) {
   await loadWellCurves(wellId);
 }
 
-// ====================================
 // CARREGAR CURVAS DO POÇO
-// ====================================
 async function loadWellCurves(wellId) {
   try {
     clearError();
@@ -296,9 +278,7 @@ async function loadWellCurves(wellId) {
   }
 }
 
-// ====================================
 // EXIBIR CURVAS COMO CHIPS
-// ====================================
 function displayCurves(curves) {
   elements.curvesContainer.classList.add("has-curves");
   
@@ -321,9 +301,7 @@ function displayCurves(curves) {
   });
 }
 
-// ====================================
 // TOGGLE SELEÇÃO DE CURVA
-// ====================================
 function toggleCurve(chip) {
   const curve = chip.dataset.curve;
   
@@ -343,9 +321,7 @@ function toggleCurve(chip) {
   updateSelectionUI();
 }
 
-// ====================================
 // ATUALIZAR UI DE SELEÇÃO
-// ====================================
 function updateSelectionUI() {
   const count = state.selectedCurves.length;
   const counter = document.getElementById("selectionCounter");
@@ -380,9 +356,7 @@ function updateSelectionUI() {
   log("Seleção atualizada", { count, curves: state.selectedCurves });
 }
 
-// ====================================
 // FEEDBACK MÁXIMO ATINGIDO
-// ====================================
 function showMaxReachedFeedback() {
   const container = document.querySelector(".curves-selector");
   container.classList.add("shake");
@@ -391,17 +365,13 @@ function showMaxReachedFeedback() {
   }, 300);
 }
 
-// ====================================
 // RESETAR DISPLAY DE CURVAS
-// ====================================
 function resetCurvesDisplay() {
   elements.curvesContainer.classList.remove("has-curves");
   elements.curvesContainer.innerHTML = "<div class=\"placeholder-text\">Selecione um poço primeiro</div>";
 }
 
-// ====================================
 // GERAR PERFIL
-// ====================================
 async function generateProfile(e) {
   if (e) e.preventDefault();
   
@@ -458,9 +428,7 @@ async function generateProfile(e) {
   }
 }
 
-// ====================================
 // MOSTRAR/ESCONDER LOADING
-// ====================================
 function showLoading() {
   state.isLoading = true;
   elements.generateBtn.disabled = true;
@@ -490,9 +458,7 @@ function hideLoading() {
   elements.btnLoader.classList.add("hidden");
 }
 
-// ====================================
 // EXIBIR IMAGEM
-// ====================================
 function displayImage(imageUrl, params) {
   elements.imageContainer.innerHTML = `
     <img src="${imageUrl}" 
@@ -510,9 +476,7 @@ function displayImage(imageUrl, params) {
   log("Perfil exibido", { well: params.well, curves: params.curves });
 }
 
-// ====================================
 // VERIFICAR PARÂMETROS DA URL
-// ====================================
 async function checkURLParams() {
   const urlParams = new URLSearchParams(window.location.search);
   
@@ -564,9 +528,7 @@ async function checkURLParams() {
   }
 }
 
-// ====================================
 // FUNÇÕES DE AÇÃO
-// ====================================
 
 // Download da imagem
 function downloadImage() {
@@ -574,7 +536,7 @@ function downloadImage() {
   
   const link = document.createElement("a");
   link.href = state.currentImageUrl;
-  link.download = `perfil_${state.lastParams.well}_${Date.now()}.svg`;
+  link.download = `perfil_${state.lastParams.well}_${Date.now()}.png`;
   link.click();
   
   log("Download iniciado", { well: state.lastParams.well });
@@ -628,9 +590,7 @@ async function copyLink() {
   log("Link copiado", input.value);
 }
 
-// ====================================
 // ATALHOS DE TECLADO
-// ====================================
 function handleKeyPress(e) {
   // Ctrl/Cmd + Enter para gerar
   if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && !state.isLoading) {
@@ -650,9 +610,7 @@ function handleKeyPress(e) {
   }
 }
 
-// ====================================
 // EXPORTAR PARA DEBUGGING GLOBAL
-// ====================================
 window.CurvesAPI = {
   state,
   CONFIG,
