@@ -6,12 +6,13 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // URL da API externa
-const API_BASE_URL = "http://swk2adm1-001.k2sistemas.com.br:9095";
+const API_BASE_URL = process.env.API_BASE_URL || "http://swk2adm1-001.k2sistemas.com.br:9095";
 
 // Middlewares
 app.use(cors());
 app.use(express.json());
 app.use(express.static("public"));
+app.set("trust proxy", true);
 
 // PROXY PARA API EXTERNA
 
@@ -153,7 +154,7 @@ app.listen(PORT, () => {
     - GET  /api/wells              → Lista todos os poços
     - GET  /api/wells/:id/curves   → Curvas de um poço
     - POST /api/generate-profile   → Gerar perfil
-    - GET  /api/health            → Status da API
+    - GET  /api/health             → Status da API
     ================================
   `);
 });
