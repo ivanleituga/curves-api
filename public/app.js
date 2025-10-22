@@ -22,7 +22,10 @@ const state = {
   // Estado da aplicação
   isLoading: false,
   currentImageUrl: null,
-  lastParams: null
+  lastParams: null,
+  
+  // 🔐 NOVO: Token de autenticação
+  accessToken: null
 };
 
 // ELEMENTOS DO DOM
@@ -62,6 +65,90 @@ const elements = {
   debugPanel: document.getElementById("debugPanel"),
   debugContent: document.getElementById("debugContent")
 };
+
+// ===============================================
+// 🔐 GERENCIAMENTO DE TOKEN (NOVO)
+// ===============================================
+
+/**
+ * Extrai token do hash fragment da URL
+ * Formato esperado: #token=abc123...
+ */
+function extractTokenFromHash() {
+  const hash = window.location.hash;
+  
+  if (!hash || !hash.includes("token=")) {
+    log("Nenhum token encontrado no hash");
+    return null;
+  }
+  
+  // Extrair token do hash (#token=abc123)
+  const match = hash.match(/token=([^&]+)/);
+  
+  if (match && match[1]) {
+    const token = match[1];
+    log("Token extraído do hash", { length: token.length });
+    
+    // Limpar hash da URL (segurança visual)
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    
+    return token;
+  }
+  
+  return null;
+}
+
+/**
+ * Carrega token do sessionStorage ou hash
+ */
+function loadToken() {
+  // Primeiro, tenta extrair do hash (prioridade)
+  const hashToken = extractTokenFromHash();
+  
+  if (hashToken) {
+    log("Token encontrado no hash, armazenando em sessão");
+    sessionStorage.setItem("api_token", hashToken);
+    state.accessToken = hashToken;
+    return hashToken;
+  }
+  
+  // Se não há token no hash, tenta recuperar do sessionStorage
+  const storedToken = sessionStorage.getItem("api_token");
+  
+  if (storedToken) {
+    log("Token recuperado do sessionStorage");
+    state.accessToken = storedToken;
+    return storedToken;
+  }
+  
+  log("Nenhum token disponível", null);
+  return null;
+}
+
+/**
+ * Remove token da sessão
+ */
+function clearToken() {
+  sessionStorage.removeItem("api_token");
+  state.accessToken = null;
+  log("Token removido da sessão");
+}
+
+/**
+ * Adiciona Authorization header nas requisições
+ */
+function getFetchHeaders() {
+  const headers = {
+    "Content-Type": "application/json"
+  };
+  
+  if (state.accessToken) {
+    headers["Authorization"] = `Bearer ${state.accessToken}`;
+    log("Bearer token incluído na requisição");
+  }
+  
+  return headers;
+}
 
 // FUNÇÕES AUXILIARES
 
@@ -140,6 +227,17 @@ function updateURL() {
 document.addEventListener("DOMContentLoaded", async () => {
   log("Iniciando aplicação");
   
+  // 🔐 NOVO: Carregar token
+  loadToken();
+  
+  if (state.accessToken) {
+    log("Token carregado com sucesso", { length: state.accessToken.length });
+    updateStatus("Autenticado", "success");
+  } else {
+    log("Nenhum token disponível - modo limitado");
+    updateStatus("Sem autenticação", "warning");
+  }
+  
   // Verificar saúde da API
   await checkAPIHealth();
   
@@ -158,7 +256,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 // VERIFICAR SAÚDE DA API
 async function checkAPIHealth() {
   try {
-    const response = await fetch(`${CONFIG.API_URL}/health`);
+    const response = await fetch(`${CONFIG.API_URL}/health`, {
+      headers: getFetchHeaders() // 🔐 NOVO: Incluir Bearer token
+    });
     const data = await response.json();
     
     if (data.status === "ok") {
@@ -178,7 +278,18 @@ async function loadWells() {
   try {
     log("Carregando lista de poços");
     
-    const response = await fetch(`${CONFIG.API_URL}/wells`);
+    const response = await fetch(`${CONFIG.API_URL}/wells`, {
+      headers: getFetchHeaders() // 🔐 NOVO: Incluir Bearer token
+    });
+    
+    // 🔐 NOVO: Tratar erro 401 (não autorizado)
+    if (response.status === 401) {
+      showError("Não autenticado. Token inválido ou ausente.");
+      log("Erro 401: Token inválido");
+      clearToken();
+      return;
+    }
+    
     const wells = await response.json();
     
     state.wells = wells;
@@ -261,7 +372,17 @@ async function loadWellCurves(wellId) {
     // Mostrar loading
     elements.curvesContainer.innerHTML = "<div class=\"placeholder-text\">Carregando curvas...</div>";
     
-    const response = await fetch(`${CONFIG.API_URL}/wells/${wellId}/curves`);
+    const response = await fetch(`${CONFIG.API_URL}/wells/${wellId}/curves`, {
+      headers: getFetchHeaders() // 🔐 NOVO: Incluir Bearer token
+    });
+    
+    // 🔐 NOVO: Tratar erro 401
+    if (response.status === 401) {
+      showError("Não autenticado. Token inválido ou ausente.");
+      clearToken();
+      return;
+    }
+    
     const data = await response.json();
     
     state.availableCurves = data.curves;
@@ -381,6 +502,12 @@ async function generateProfile(e) {
     return;
   }
   
+  // 🔐 NOVO: Validar token
+  if (!state.accessToken) {
+    showError("Token de autenticação não disponível. Recarregue a página com um link válido.");
+    return;
+  }
+  
   // Preparar parâmetros
   const params = {
     well: state.selectedWell.id,
@@ -397,11 +524,14 @@ async function generateProfile(e) {
   try {
     const response = await fetch("/api/generate-profile", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: getFetchHeaders(), // 🔐 NOVO: Incluir Bearer token
       body: JSON.stringify(params)
     });
+    
+    // 🔐 NOVO: Tratar erro 401
+    if (response.status === 401) {
+      throw new Error("Token inválido ou expirado. Solicite um novo link.");
+    }
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -423,6 +553,11 @@ async function generateProfile(e) {
   } catch (error) {
     console.error("Erro ao gerar perfil:", error);
     showError(error.message || "Erro ao gerar o perfil. Tente novamente.");
+    
+    // Se erro de autenticação, limpar token
+    if (error.message.includes("Token")) {
+      clearToken();
+    }
   } finally {
     hideLoading();
   }
@@ -615,5 +750,7 @@ window.CurvesAPI = {
   state,
   CONFIG,
   generateProfile,
-  log
+  log,
+  clearToken,
+  loadToken
 };

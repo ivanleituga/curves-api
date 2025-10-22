@@ -14,6 +14,31 @@ app.use(express.json());
 app.use(express.static("public"));
 app.set("trust proxy", true);
 
+// ===============================================
+// 🔐 MIDDLEWARE DE VALIDAÇÃO DE TOKEN (NOVO)
+// ===============================================
+
+/**
+ * Extrai e valida Bearer token do header Authorization
+ * Não bloqueia requisições sem token, apenas registra no req
+ */
+function extractBearerToken(req, _res, next) {
+  const authHeader = req.headers.authorization;
+  
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    req.bearerToken = authHeader.substring(7); // Remove "Bearer "
+    console.log(`🔐 Bearer token detectado: ${req.bearerToken.substring(0, 20)}...`);
+  } else {
+    req.bearerToken = null;
+    console.log("⚠️  Requisição sem Bearer token");
+  }
+  
+  next();
+}
+
+// Aplicar middleware a todas as rotas
+app.use(extractBearerToken);
+
 // PROXY PARA API EXTERNA
 
 // 1. LISTAR TODOS OS POÇOS
@@ -21,7 +46,28 @@ app.get("/api/wells", async (req, res) => {
   try {
     console.log("📋 Buscando poços da API externa...");
     
-    const response = await fetch(`${API_BASE_URL}/wells`);
+    // 🔐 NOVO: Incluir Bearer token se disponível
+    const headers = {};
+    if (req.bearerToken) {
+      headers["Authorization"] = `Bearer ${req.bearerToken}`;
+      console.log("   🔑 Bearer token incluído na requisição");
+    }
+    
+    const response = await fetch(`${API_BASE_URL}/wells`, { headers });
+    
+    // 🔐 NOVO: Tratar erro 401 da API externa
+    if (response.status === 401) {
+      console.log("   ❌ API externa retornou 401 - Token inválido");
+      return res.status(401).json({ 
+        error: "Token inválido ou expirado",
+        message: "Autenticação falhou na API externa"
+      });
+    }
+    
+    if (!response.ok) {
+      throw new Error(`API externa retornou: ${response.status}`);
+    }
+    
     const data = await response.json();
     
     // Transformar para o formato esperado pelo frontend
@@ -32,7 +78,9 @@ app.get("/api/wells", async (req, res) => {
       state: wellId.split("-").pop() // Extrai estado do ID
     }));
     
+    console.log(`   ✅ ${wells.length} poços retornados`);
     res.json(wells);
+    
   } catch (error) {
     console.error("❌ Erro ao buscar poços:", error);
     res.status(500).json({ error: "Erro ao buscar poços" });
@@ -45,8 +93,31 @@ app.get("/api/wells/:wellId/curves", async (req, res) => {
     const { wellId } = req.params;
     console.log(`🔍 Buscando curvas do poço: ${wellId}`);
     
-    const response = await fetch(`${API_BASE_URL}/curves?well=${wellId}`);
+    // 🔐 NOVO: Incluir Bearer token se disponível
+    const headers = {};
+    if (req.bearerToken) {
+      headers["Authorization"] = `Bearer ${req.bearerToken}`;
+      console.log("   🔑 Bearer token incluído na requisição");
+    }
+    
+    const response = await fetch(`${API_BASE_URL}/curves?well=${wellId}`, { headers });
+    
+    // 🔐 NOVO: Tratar erro 401 da API externa
+    if (response.status === 401) {
+      console.log("   ❌ API externa retornou 401 - Token inválido");
+      return res.status(401).json({ 
+        error: "Token inválido ou expirado",
+        message: "Autenticação falhou na API externa"
+      });
+    }
+    
+    if (!response.ok) {
+      throw new Error(`API externa retornou: ${response.status}`);
+    }
+    
     const data = await response.json();
+    
+    console.log(`   ✅ ${data.count} curvas encontradas`);
     
     res.json({
       wellId: data.well,
@@ -54,6 +125,7 @@ app.get("/api/wells/:wellId/curves", async (req, res) => {
       curves: data.curves,
       totalCurves: data.count
     });
+    
   } catch (error) {
     console.error("❌ Erro ao buscar curvas:", error);
     res.status(500).json({ error: "Erro ao buscar curvas" });
@@ -82,18 +154,35 @@ app.post("/api/generate-profile", async (req, res) => {
     
     console.log("📊 Gerando perfil:", { well, curves, hasLito });
     
+    // 🔐 NOVO: Incluir Bearer token se disponível
+    const headers = {
+      "Content-Type": "application/json"
+    };
+    
+    if (req.bearerToken) {
+      headers["Authorization"] = `Bearer ${req.bearerToken}`;
+      console.log("   🔑 Bearer token incluído na requisição");
+    }
+    
     // Chamar API externa
     const response = await fetch(`${API_BASE_URL}/render_b64`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers,
       body: JSON.stringify({
         well,
         curves,
         hasLito
       })
     });
+    
+    // 🔐 NOVO: Tratar erro 401 da API externa
+    if (response.status === 401) {
+      console.log("   ❌ API externa retornou 401 - Token inválido");
+      return res.status(401).json({ 
+        error: "Token inválido ou expirado",
+        message: "Autenticação falhou na API externa"
+      });
+    }
     
     if (!response.ok) {
       throw new Error(`API retornou erro: ${response.status}`);
@@ -103,6 +192,8 @@ app.post("/api/generate-profile", async (req, res) => {
     
     // Converter base64 para buffer e enviar como imagem
     const imageBuffer = Buffer.from(data.data, "base64");
+    
+    console.log(`   ✅ Perfil gerado: ${imageBuffer.length} bytes`);
     
     res.set("Content-Type", data.content_type || "image/png");
     res.send(imageBuffer);
@@ -116,8 +207,14 @@ app.post("/api/generate-profile", async (req, res) => {
 // 4. HEALTH CHECK
 app.get("/api/health", async (req, res) => {
   try {
+    // 🔐 NOVO: Incluir Bearer token no health check se disponível
+    const headers = {};
+    if (req.bearerToken) {
+      headers["Authorization"] = `Bearer ${req.bearerToken}`;
+    }
+    
     // Verificar se a API externa está respondendo
-    const response = await fetch(`${API_BASE_URL}/wells`);
+    const response = await fetch(`${API_BASE_URL}/wells`, { headers });
     const apiHealthy = response.ok;
     
     res.json({ 
@@ -131,6 +228,10 @@ app.get("/api/health", async (req, res) => {
       externalAPI: {
         url: API_BASE_URL,
         status: apiHealthy ? "online" : "offline"
+      },
+      authentication: {
+        tokenPresent: !!req.bearerToken,
+        tokenLength: req.bearerToken ? req.bearerToken.length : 0
       }
     });
   } catch (error) {
@@ -145,7 +246,7 @@ app.get("/api/health", async (req, res) => {
 // INICIAR SERVIDOR
 app.listen(PORT, () => {
   console.log(`
-    🚀 Curves API Server v3.0 (Produção)
+    🚀 Curves API Server v3.1 (Produção com OAuth)
     ================================
     Servidor local: http://localhost:${PORT}
     API Externa: ${API_BASE_URL}
@@ -155,6 +256,10 @@ app.listen(PORT, () => {
     - GET  /api/wells/:id/curves   → Curvas de um poço
     - POST /api/generate-profile   → Gerar perfil
     - GET  /api/health             → Status da API
+    
+    🔐 Autenticação:
+    - Bearer token via Authorization header
+    - Token repassado para API externa
     ================================
   `);
 });
