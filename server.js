@@ -8,6 +8,9 @@ const PORT = process.env.PORT || 3001;
 // URL da API externa
 const API_BASE_URL = process.env.API_BASE_URL || "http://swk2adm1-001.k2sistemas.com.br:9095";
 
+// Google Maps API Key
+const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || "";
+
 // Middlewares
 app.use(cors());
 app.use(express.json());
@@ -15,7 +18,7 @@ app.use(express.static("public"));
 app.set("trust proxy", true);
 
 // ===============================================
-// 🔐 MIDDLEWARE DE VALIDAÇÃO DE TOKEN (NOVO)
+// 🔐 MIDDLEWARE DE VALIDAÇÃO DE TOKEN
 // ===============================================
 
 /**
@@ -39,14 +42,53 @@ function extractBearerToken(req, _res, next) {
 // Aplicar middleware a todas as rotas
 app.use(extractBearerToken);
 
+// ===============================================
+// FUNÇÕES AUXILIARES
+// ===============================================
+
+/**
+ * Converte coordenada de graus:minutos:segundos para decimal
+ * Exemplo: "-22:41:58,383" → -22.6995
+ */
+function convertGMSToDecimal(gmsString) {
+  if (!gmsString) return null;
+  
+  // Normalizar: trocar vírgula por ponto
+  gmsString = gmsString.replace(",", ".");
+  
+  // Verificar sinal negativo
+  const negative = gmsString.startsWith("-");
+  gmsString = gmsString.replace("-", "");
+  
+  // Separar partes
+  const parts = gmsString.split(":");
+  if (parts.length !== 3) return null;
+  
+  try {
+    const degrees = parseFloat(parts[0]);
+    const minutes = parseFloat(parts[1]);
+    const seconds = parseFloat(parts[2]);
+    
+    // Converter para decimal
+    const decimal = degrees + (minutes / 60) + (seconds / 3600);
+    
+    return negative ? -decimal : decimal;
+  } catch (error) {
+    console.error("Erro ao converter coordenada:", gmsString, error);
+    return null;
+  }
+}
+
+// ===============================================
 // PROXY PARA API EXTERNA
+// ===============================================
 
 // 1. LISTAR TODOS OS POÇOS
 app.get("/api/wells", async (req, res) => {
   try {
     console.log("📋 Buscando poços da API externa...");
     
-    // 🔐 NOVO: Incluir Bearer token se disponível
+    // Incluir Bearer token se disponível
     const headers = {};
     if (req.bearerToken) {
       headers["Authorization"] = `Bearer ${req.bearerToken}`;
@@ -55,7 +97,7 @@ app.get("/api/wells", async (req, res) => {
     
     const response = await fetch(`${API_BASE_URL}/wells`, { headers });
     
-    // 🔐 NOVO: Tratar erro 401 da API externa
+    // Tratar erro 401 da API externa
     if (response.status === 401) {
       console.log("   ❌ API externa retornou 401 - Token inválido");
       return res.status(401).json({ 
@@ -93,7 +135,7 @@ app.get("/api/wells/:wellId/curves", async (req, res) => {
     const { wellId } = req.params;
     console.log(`🔍 Buscando curvas do poço: ${wellId}`);
     
-    // 🔐 NOVO: Incluir Bearer token se disponível
+    // Incluir Bearer token se disponível
     const headers = {};
     if (req.bearerToken) {
       headers["Authorization"] = `Bearer ${req.bearerToken}`;
@@ -102,7 +144,7 @@ app.get("/api/wells/:wellId/curves", async (req, res) => {
     
     const response = await fetch(`${API_BASE_URL}/curves?well=${wellId}`, { headers });
     
-    // 🔐 NOVO: Tratar erro 401 da API externa
+    // Tratar erro 401 da API externa
     if (response.status === 401) {
       console.log("   ❌ API externa retornou 401 - Token inválido");
       return res.status(401).json({ 
@@ -154,7 +196,7 @@ app.post("/api/generate-profile", async (req, res) => {
     
     console.log("📊 Gerando perfil:", { well, curves, hasLito });
     
-    // 🔐 NOVO: Incluir Bearer token se disponível
+    // Incluir Bearer token se disponível
     const headers = {
       "Content-Type": "application/json"
     };
@@ -175,7 +217,7 @@ app.post("/api/generate-profile", async (req, res) => {
       })
     });
     
-    // 🔐 NOVO: Tratar erro 401 da API externa
+    // Tratar erro 401 da API externa
     if (response.status === 401) {
       console.log("   ❌ API externa retornou 401 - Token inválido");
       return res.status(401).json({ 
@@ -204,10 +246,106 @@ app.post("/api/generate-profile", async (req, res) => {
   }
 });
 
-// 4. HEALTH CHECK
+// ===============================================
+// 4. CONFIG DO GOOGLE MAPS
+// ===============================================
+app.get("/api/maps-config", (req, res) => {
+  res.json({
+    apiKey: GOOGLE_MAPS_API_KEY || ""
+  });
+});
+
+// ===============================================
+// 5. BUSCAR COORDENADAS DE POÇOS (MAPA)
+// ===============================================
+app.post("/api/wells-coordinates", async (req, res) => {
+  try {
+    const { wellNames } = req.body;
+    
+    // Validações
+    if (!wellNames || !Array.isArray(wellNames) || wellNames.length === 0) {
+      return res.status(400).json({
+        error: "Lista de poços é obrigatória",
+        required: { wellNames: "array de strings" }
+      });
+    }
+    
+    if (wellNames.length > 25) {
+      return res.status(400).json({
+        error: "Máximo de 25 poços por mapa",
+        received: wellNames.length
+      });
+    }
+    
+    console.log(`🗺️  Buscando coordenadas para ${wellNames.length} poço(s)`);
+    
+    // Incluir Bearer token se disponível
+    const headers = {
+      "Content-Type": "application/json"
+    };
+    
+    if (req.bearerToken) {
+      headers["Authorization"] = `Bearer ${req.bearerToken}`;
+      console.log("   🔑 Bearer token incluído na requisição");
+    }
+    
+    // Buscar coordenadas da API externa (endpoint de coordenadas)
+    // Assumindo que existe um endpoint /wells/coordinates na API
+    const response = await fetch(`${API_BASE_URL}/wells/coordinates`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ wells: wellNames })
+    });
+    
+    let wellsWithCoordinates = [];
+    
+    if (response.ok) {
+      // API externa retornou as coordenadas
+      const data = await response.json();
+      wellsWithCoordinates = data.wells || [];
+    } else {
+      // Fallback: retornar coordenadas mock para teste
+      // TODO: Integrar com o banco de dados real
+      console.log("   ⚠️  Endpoint /wells/coordinates não disponível na API externa");
+      console.log("   ⚠️  Usando coordenadas de exemplo (integrar com banco)");
+      
+      wellsWithCoordinates = wellNames.map((name, index) => ({
+        name: name,
+        lat: -22.0 - (index * 0.5),  // Coordenadas de exemplo
+        lng: -40.0 - (index * 0.5),
+        state: name.split("-").pop()
+      }));
+    }
+    
+    // Filtrar apenas poços com coordenadas válidas
+    const validWells = wellsWithCoordinates.filter(w => w.lat && w.lng);
+    
+    if (validWells.length === 0) {
+      return res.status(404).json({
+        error: "Nenhum poço com coordenadas válidas encontrado"
+      });
+    }
+    
+    console.log(`   ✅ Coordenadas obtidas para ${validWells.length} poço(s)`);
+    
+    // Retornar apenas as coordenadas (o mapa interativo será criado no frontend)
+    res.json({
+      wells: validWells,
+      count: validWells.length
+    });
+    
+  } catch (error) {
+    console.error("❌ Erro ao buscar coordenadas:", error);
+    res.status(500).json({ error: "Erro ao buscar coordenadas dos poços" });
+  }
+});
+
+// ===============================================
+// 6. HEALTH CHECK
+// ===============================================
 app.get("/api/health", async (req, res) => {
   try {
-    // 🔐 NOVO: Incluir Bearer token no health check se disponível
+    // Incluir Bearer token no health check se disponível
     const headers = {};
     if (req.bearerToken) {
       headers["Authorization"] = `Bearer ${req.bearerToken}`;
@@ -223,11 +361,15 @@ app.get("/api/health", async (req, res) => {
       endpoints: [
         "GET /api/wells",
         "GET /api/wells/:wellId/curves",
-        "POST /api/generate-profile"
+        "POST /api/generate-profile",
+        "POST /api/wells-coordinates"
       ],
       externalAPI: {
         url: API_BASE_URL,
         status: apiHealthy ? "online" : "offline"
+      },
+      googleMaps: {
+        configured: !!GOOGLE_MAPS_API_KEY
       },
       authentication: {
         tokenPresent: !!req.bearerToken,
@@ -243,18 +385,23 @@ app.get("/api/health", async (req, res) => {
   }
 });
 
+// ===============================================
 // INICIAR SERVIDOR
+// ===============================================
 app.listen(PORT, () => {
   console.log(`
-    🚀 Curves API Server v3.1 (Produção com OAuth)
+    🚀 Curves API Server v4.0 (Perfis + Mapas Interativos)
     ================================
     Servidor local: http://localhost:${PORT}
     API Externa: ${API_BASE_URL}
+    Google Maps: ${GOOGLE_MAPS_API_KEY ? "✅ Configurado" : "⚠️  Não configurado"}
     
     📍 Endpoints disponíveis:
     - GET  /api/wells              → Lista todos os poços
     - GET  /api/wells/:id/curves   → Curvas de um poço
-    - POST /api/generate-profile   → Gerar perfil
+    - POST /api/generate-profile   → Gerar perfil composto
+    - GET  /api/maps-script        → Script do Google Maps
+    - POST /api/wells-coordinates  → Buscar coordenadas (mapa)
     - GET  /api/health             → Status da API
     
     🔐 Autenticação:

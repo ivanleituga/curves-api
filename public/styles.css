@@ -1,101 +1,163 @@
-/* Reset e Base */
+/* ===============================================
+   K2 SISTEMAS - VISUALIZADOR DE POÇOS
+   Estilos principais
+   =============================================== */
+
+/* Variáveis CSS */
+:root {
+    --primary-blue: #1a365d;
+    --primary-light: #3182ce;
+    --secondary: #718096;
+    --success: #38a169;
+    --danger: #e53e3e;
+    --warning: #d69e2e;
+    --gray-50: #f7fafc;
+    --gray-100: #edf2f7;
+    --gray-200: #e2e8f0;
+    --gray-300: #cbd5e0;
+    --gray-400: #a0aec0;
+    --gray-500: #718096;
+    --gray-600: #4a5568;
+    --gray-700: #2d3748;
+    --gray-800: #1a202c;
+    --gray-900: #171923;
+}
+
+/* Reset básico */
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
 }
 
-:root {
-    --primary-blue: #1e3a8a;
-    --primary-light: #3b82f6;
-    --success: #10b981;
-    --danger: #ef4444;
-    --warning: #f59e0b;
-    --gray-50: #f9fafb;
-    --gray-100: #f3f4f6;
-    --gray-200: #e5e7eb;
-    --gray-300: #d1d5db;
-    --gray-500: #6b7280;
-    --gray-700: #374151;
-    --gray-900: #111827;
-}
-
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    background: var(--gray-50);
-    color: var(--gray-900);
-    line-height: 1.6;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    background: var(--gray-100);
+    color: var(--gray-800);
     min-height: 100vh;
-    display: flex;
-    flex-direction: column;
     padding-bottom: 60px;
 }
 
-/* Header */
+/* ===============================================
+   HEADER
+   =============================================== */
+
 .main-header {
-    background: linear-gradient(135deg, var(--primary-blue), var(--primary-light));
+    background: linear-gradient(135deg, var(--primary-blue) 0%, #2c5282 100%);
     color: white;
-    padding: 1rem 0; /* menor altura do header */
-    /* sem text-align center para permitir alinhamento à esquerda */
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    padding: 1rem 2rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-/* Container do header em linha */
 .header-container {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 1rem;
     max-width: 1400px;
     margin: 0 auto;
-    padding: 0 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
 }
 
 .company-logo {
-    height: 108px;
-    width: auto;
+    height: 45px;
+    background: white;
+    padding: 6px 10px;
+    border-radius: 6px;
 }
 
 .header-divider {
-    width: 2px;
-    height: 90px;
+    width: 1px;
+    height: 40px;
     background: rgba(255,255,255,0.3);
-    border-radius: 2px;
 }
 
-.header-text {
-    text-align: center;
-}
-
-.main-header h1 {
-    font-size: 1.875rem;
+.header-text h1 {
+    font-size: 1.5rem;
     font-weight: 600;
-    margin-bottom: 0.25rem;
-    letter-spacing: -0.025em;
 }
 
-.main-header p {
+.header-text p {
     font-size: 0.875rem;
     opacity: 0.9;
 }
 
-/* Container Principal */
-.container {
+/* ===============================================
+   NAVEGAÇÃO POR ABAS
+   =============================================== */
+
+.tabs-nav {
+    background: white;
+    border-bottom: 1px solid var(--gray-200);
+    padding: 0 2rem;
     display: flex;
-    gap: 1.5rem;
+    gap: 0;
     max-width: 1400px;
-    width: 100%;
-    margin: 1.5rem auto;
-    padding: 0 1.5rem;
-    flex: 1;
+    margin: 0 auto;
 }
 
-/* Painel de Controles */
+.tab-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem 1.5rem;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    color: var(--gray-500);
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+    color: var(--primary-light);
+    background: var(--gray-50);
+}
+
+.tab-btn.active {
+    color: var(--primary-blue);
+    border-bottom-color: var(--primary-blue);
+    background: var(--gray-50);
+}
+
+.tab-btn svg {
+    stroke-width: 2;
+}
+
+/* ===============================================
+   CONTEÚDO DAS ABAS
+   =============================================== */
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* ===============================================
+   CONTAINER PRINCIPAL
+   =============================================== */
+
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 1.5rem;
+    display: flex;
+    gap: 1.5rem;
+}
+
+/* ===============================================
+   PAINEL DE CONTROLES (LATERAL)
+   =============================================== */
+
 .control-panel {
+    width: 320px;
+    flex-shrink: 0;
     background: white;
     border-radius: 0.5rem;
     padding: 1.5rem;
-    width: 360px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     height: fit-content;
 }
@@ -109,7 +171,10 @@ body {
     color: var(--gray-700);
 }
 
-/* Formulário */
+/* ===============================================
+   FORMULÁRIO
+   =============================================== */
+
 .form-group {
     margin-bottom: 1.25rem;
 }
@@ -148,7 +213,42 @@ body {
     margin-top: 0.25rem;
 }
 
-/* Container de Curvas Dinâmico */
+/* Input com botão */
+.input-with-button {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.input-with-button input {
+    flex: 1;
+}
+
+.btn-add {
+    padding: 0.625rem;
+    background: var(--primary-light);
+    color: white;
+    border: none;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-add:hover {
+    background: var(--primary-blue);
+}
+
+.btn-add:disabled {
+    background: var(--gray-300);
+    cursor: not-allowed;
+}
+
+/* ===============================================
+   CONTAINER DE CURVAS
+   =============================================== */
+
 .curves-container {
     min-height: 100px;
     padding: 0.75rem;
@@ -209,57 +309,37 @@ body {
 
 /* Contador de Seleção */
 .selection-counter {
-    margin-top: 0.75rem;
-    padding: 0.5rem;
-    background: var(--gray-100);
-    border-radius: 0.25rem;
-    font-size: 0.813rem;
-    color: var(--gray-600);
+    margin-top: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--gray-500);
 }
 
-.selection-counter.warning {
-    background: #fef3c7;
-    color: #92400e;
-}
+/* ===============================================
+   SWITCH (TOGGLE)
+   =============================================== */
 
-.selection-counter.max-reached {
-    background: #dcfce7;
-    color: var(--success);
-}
-
-/* Switch de Litologia */
 .switch-label {
     display: flex;
     align-items: center;
+    gap: 0.75rem;
     cursor: pointer;
 }
 
-.switch {
-    position: relative;
-    display: inline-block;
-    width: 48px;
-    height: 17px;
-    margin-right: 0.75rem;
-}
-
 .switch-label input {
-    opacity: 0;
-    width: 0;
-    height: 0;
+    display: none;
 }
 
-.switch::before {
-    content: "";
-    position: absolute;
-    width: 48px;
+.switch {
+    width: 44px;
     height: 24px;
     background: var(--gray-300);
-    border-radius: 24px;
-    transition: 0.3s;
+    border-radius: 12px;
+    position: relative;
+    transition: all 0.2s;
 }
 
 .switch::after {
-    content: "";
+    content: '';
     position: absolute;
     width: 20px;
     height: 20px;
@@ -267,71 +347,92 @@ body {
     border-radius: 50%;
     top: 2px;
     left: 2px;
-    transition: 0.3s;
+    transition: all 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
 
-.switch-label input:checked + .switch::before {
+.switch-label input:checked + .switch {
     background: var(--primary-light);
 }
 
 .switch-label input:checked + .switch::after {
-    transform: translateX(24px);
+    left: 22px;
 }
 
 .switch-text {
-    font-size: 0.875rem;
+    font-weight: 500;
     color: var(--gray-700);
 }
 
-/* Botões */
+/* ===============================================
+   BOTÕES
+   =============================================== */
+
 .btn-generate {
     width: 100%;
-    padding: 0.75rem;
-    background: linear-gradient(135deg, var(--primary-light), var(--primary-blue));
+    padding: 0.875rem;
+    background: linear-gradient(135deg, var(--primary-blue) 0%, #2c5282 100%);
     color: white;
     border: none;
-    border-radius: 0.375rem;
+    border-radius: 0.5rem;
     font-size: 1rem;
-    font-weight: 500;
+    font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
+    margin-bottom: 0.75rem;
 }
 
 .btn-generate:hover:not(:disabled) {
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-}
-
-.btn-generate:active {
-    transform: translateY(0);
+    box-shadow: 0 4px 12px rgba(26, 54, 93, 0.3);
 }
 
 .btn-generate:disabled {
-    opacity: 0.6;
+    background: var(--gray-300);
     cursor: not-allowed;
+    transform: none;
+}
+
+.btn-secondary {
+    width: 100%;
+    padding: 0.75rem;
+    background: white;
+    color: var(--gray-600);
+    border: 1px solid var(--gray-300);
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+    background: var(--gray-50);
+    border-color: var(--gray-400);
 }
 
 .btn-action {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
     padding: 0.5rem 1rem;
     background: white;
-    color: var(--primary-blue);
-    border: 1px solid var(--primary-blue);
+    color: var(--gray-600);
+    border: 1px solid var(--gray-300);
     border-radius: 0.375rem;
     font-size: 0.875rem;
     cursor: pointer;
     transition: all 0.2s;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.375rem;
 }
 
 .btn-action:hover:not(:disabled) {
-    background: var(--primary-blue);
-    color: white;
+    background: var(--gray-50);
+    border-color: var(--primary-light);
+    color: var(--primary-light);
 }
 
 .btn-action:disabled {
@@ -342,61 +443,38 @@ body {
 .btn-link {
     background: none;
     border: none;
-    color: var(--primary-light);
+    color: var(--gray-500);
+    font-size: 0.75rem;
     cursor: pointer;
-    font-size: 0.875rem;
     text-decoration: underline;
 }
 
-.btn-copy {
-    padding: 0.5rem;
-    background: var(--primary-light);
-    color: white;
-    border: none;
-    border-radius: 0.25rem;
-    cursor: pointer;
-    transition: all 0.2s;
+.btn-link:hover {
+    color: var(--primary-light);
 }
 
-.btn-copy:hover {
-    background: var(--primary-blue);
-}
+/* ===============================================
+   STATUS PANEL
+   =============================================== */
 
-/* Loader */
-.loader {
-    width: 20px;
-    height: 20px;
-    border: 3px solid rgba(255,255,255,0.3);
-    border-top-color: white;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
-
-/* Status Panel */
 .status-panel {
     margin-top: 1.5rem;
-    padding: 1rem;
-    background: var(--gray-50);
-    border-radius: 0.375rem;
-    border-left: 3px solid var(--primary-light);
+    padding-top: 1rem;
+    border-top: 1px solid var(--gray-200);
 }
 
 .status-panel h3 {
     font-size: 0.875rem;
     font-weight: 600;
-    color: var(--gray-700);
+    color: var(--gray-600);
     margin-bottom: 0.75rem;
 }
 
 .status-item {
     display: flex;
     justify-content: space-between;
-    font-size: 0.813rem;
-    margin-bottom: 0.375rem;
+    font-size: 0.8125rem;
+    margin-bottom: 0.5rem;
 }
 
 .status-label {
@@ -404,24 +482,25 @@ body {
 }
 
 .status-value {
-    color: var(--gray-700);
     font-weight: 500;
+    color: var(--gray-700);
 }
 
-/* Link Panel */
+/* ===============================================
+   LINK PANEL
+   =============================================== */
+
 .link-panel {
-    margin-top: 1rem;
-    padding: 1rem;
-    background: #f0fdf4;
-    border-radius: 0.375rem;
-    border: 1px solid var(--success);
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--gray-200);
 }
 
 .link-panel h3 {
     font-size: 0.875rem;
     font-weight: 600;
-    color: var(--success);
-    margin-bottom: 0.5rem;
+    color: var(--gray-600);
+    margin-bottom: 0.75rem;
 }
 
 .link-container {
@@ -433,12 +512,33 @@ body {
     flex: 1;
     padding: 0.5rem;
     border: 1px solid var(--gray-300);
-    border-radius: 0.25rem;
-    font-size: 0.813rem;
-    background: white;
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    background: var(--gray-50);
 }
 
-/* Área de Visualização */
+.btn-copy {
+    padding: 0.5rem;
+    background: var(--gray-100);
+    border: 1px solid var(--gray-300);
+    border-radius: 0.375rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-copy:hover {
+    background: var(--primary-light);
+    color: white;
+    border-color: var(--primary-light);
+}
+
+/* ===============================================
+   ÁREA DE VISUALIZAÇÃO
+   =============================================== */
+
 .visualization-area {
     flex: 1;
     background: white;
@@ -495,7 +595,147 @@ body {
     font-size: 0.875rem;
 }
 
-/* Loading State */
+/* ===============================================
+   MAPA
+   =============================================== */
+
+.map-container {
+    min-height: 500px;
+    background: var(--gray-50);
+    border-radius: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.map-container .placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.map-container img {
+    max-width: 100%;
+    max-height: 600px;
+    height: auto;
+    display: block;
+    border-radius: 0.5rem;
+}
+
+.map-container #googleMap {
+    width: 100%;
+    height: 500px;
+    border-radius: 0.5rem;
+}
+
+/* Lista de poços no mapa */
+.map-wells-list {
+    min-height: 80px;
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 0.75rem;
+    background: var(--gray-50);
+    border: 1px solid var(--gray-300);
+    border-radius: 0.375rem;
+    margin-bottom: 0.5rem;
+}
+
+.map-well-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-radius: 0.375rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.map-well-item:last-child {
+    margin-bottom: 0;
+}
+
+.map-well-item .well-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.map-well-item .well-marker {
+    width: 24px;
+    height: 24px;
+    background: var(--danger);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.map-well-item .btn-remove {
+    background: none;
+    border: none;
+    color: var(--gray-400);
+    cursor: pointer;
+    padding: 0.25rem;
+    transition: all 0.2s;
+}
+
+.map-well-item .btn-remove:hover {
+    color: var(--danger);
+}
+
+.well-count {
+    font-weight: normal;
+    color: var(--gray-500);
+}
+
+/* Legenda do Mapa */
+.map-legend {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: var(--gray-50);
+    border-radius: 0.375rem;
+}
+
+.map-legend h4 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--gray-600);
+    margin-bottom: 0.75rem;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+    margin-bottom: 0.375rem;
+}
+
+.legend-marker {
+    width: 20px;
+    height: 20px;
+    background: var(--danger);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.625rem;
+    font-weight: 600;
+}
+
+/* ===============================================
+   LOADING
+   =============================================== */
+
 .loading-overlay {
     position: absolute;
     top: 0;
@@ -524,7 +764,23 @@ body {
     margin: 0 auto 1rem;
 }
 
-/* Error Container */
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.loader {
+    width: 20px;
+    height: 20px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+/* ===============================================
+   ERROR CONTAINER
+   =============================================== */
+
 .error-container {
     margin-top: 1rem;
 }
@@ -538,7 +794,10 @@ body {
     font-size: 0.875rem;
 }
 
-/* Debug Panel */
+/* ===============================================
+   DEBUG PANEL
+   =============================================== */
+
 .debug-panel {
     position: fixed;
     bottom: 60px;
@@ -567,7 +826,10 @@ body {
     word-wrap: break-word;
 }
 
-/* Footer */
+/* ===============================================
+   FOOTER
+   =============================================== */
+
 .main-footer {
     position: fixed;
     bottom: 0;
@@ -582,7 +844,10 @@ body {
     z-index: 100;
 }
 
-/* Animação Shake */
+/* ===============================================
+   ANIMAÇÕES
+   =============================================== */
+
 @keyframes shake {
     0%, 100% { transform: translateX(0); }
     25% { transform: translateX(-5px); }
@@ -593,12 +858,18 @@ body {
     animation: shake 0.3s;
 }
 
-/* Utilidades */
+/* ===============================================
+   UTILIDADES
+   =============================================== */
+
 .hidden {
     display: none !important;
 }
 
-/* Responsividade */
+/* ===============================================
+   RESPONSIVIDADE
+   =============================================== */
+
 @media (max-width: 1024px) {
     .container {
         flex-direction: column;
@@ -635,6 +906,19 @@ body {
     .main-header p {
         font-size: 0.75rem;
     }
+
+    .tabs-nav {
+        padding: 0 1rem;
+    }
+
+    .tab-btn {
+        padding: 0.75rem 1rem;
+        font-size: 0.875rem;
+    }
+
+    .tab-btn svg {
+        display: none;
+    }
 }
 
 @media (max-width: 640px) {
@@ -660,7 +944,7 @@ body {
     }
     
     .header-divider {
-        display: none; /* Remove divisor em telas muito pequenas */
+        display: none;
     }
     
     .main-header h1 {
@@ -668,6 +952,6 @@ body {
     }
     
     .main-header p {
-        display: none; /* Esconde subtítulo em mobile pequeno para economizar espaço */
+        display: none;
     }
 }
