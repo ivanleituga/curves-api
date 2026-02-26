@@ -79,6 +79,40 @@ function convertGMSToDecimal(gmsString) {
   }
 }
 
+/**
+ * Gera URL do Google Static Maps com múltiplos marcadores
+ */
+function generateStaticMapUrl(wells) {
+  const baseUrl = "https://maps.googleapis.com/maps/api/staticmap";
+  const labels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  
+  // Parâmetros base
+  const params = new URLSearchParams();
+  params.set("size", "640x480");
+  params.set("scale", "2"); // Alta resolução
+  params.set("maptype", "terrain");
+  params.set("key", GOOGLE_MAPS_API_KEY);
+  
+  // Se poucos poços, definir zoom fixo para não ficar muito próximo
+  if (wells.length <= 2) {
+    const avgLat = wells.reduce((sum, w) => sum + w.lat, 0) / wells.length;
+    const avgLng = wells.reduce((sum, w) => sum + w.lng, 0) / wells.length;
+    params.set("center", `${avgLat},${avgLng}`);
+    params.set("zoom", "10");
+  }
+  
+  // Construir URL base
+  let url = `${baseUrl}?${params.toString()}`;
+  
+  // Adicionar marcadores
+  wells.forEach((well, index) => {
+    const label = labels[index] || "";
+    url += `&markers=color:red|label:${label}|${well.lat},${well.lng}`;
+  });
+  
+  return url;
+}
+
 // ===============================================
 // PROXY PARA API EXTERNA
 // ===============================================
@@ -256,7 +290,7 @@ app.get("/api/maps-config", (req, res) => {
 });
 
 // ===============================================
-// 5. BUSCAR COORDENADAS DE POÇOS (MAPA)
+// 5. BUSCAR COORDENADAS DE POÇOS (MAPA INTERATIVO)
 // ===============================================
 app.post("/api/wells-coordinates", async (req, res) => {
   try {
@@ -290,7 +324,6 @@ app.post("/api/wells-coordinates", async (req, res) => {
     }
     
     // Buscar coordenadas da API externa (endpoint de coordenadas)
-    // Assumindo que existe um endpoint /wells/coordinates na API
     const response = await fetch(`${API_BASE_URL}/wells/coordinates`, {
       method: "POST",
       headers,
@@ -341,7 +374,47 @@ app.post("/api/wells-coordinates", async (req, res) => {
 });
 
 // ===============================================
-// 6. HEALTH CHECK
+// 6. GERAR MAPA ESTÁTICO (PARA DOWNLOAD)
+// ===============================================
+app.post("/api/static-map", (req, res) => {
+  try {
+    const { wells } = req.body;
+    
+    // Validações
+    if (!wells || !Array.isArray(wells) || wells.length === 0) {
+      return res.status(400).json({
+        error: "Lista de poços com coordenadas é obrigatória",
+        required: { wells: "array com {name, lat, lng}" }
+      });
+    }
+    
+    // Verificar se temos API Key
+    if (!GOOGLE_MAPS_API_KEY) {
+      return res.status(500).json({
+        error: "Google Maps API Key não configurada no servidor"
+      });
+    }
+    
+    console.log(`🖼️  Gerando URL do mapa estático para ${wells.length} poço(s)`);
+    
+    // Gerar URL do Static Maps
+    const mapUrl = generateStaticMapUrl(wells);
+    
+    console.log("   ✅ URL gerada");
+    
+    res.json({
+      mapUrl: mapUrl,
+      count: wells.length
+    });
+    
+  } catch (error) {
+    console.error("❌ Erro ao gerar mapa estático:", error);
+    res.status(500).json({ error: "Erro ao gerar mapa estático" });
+  }
+});
+
+// ===============================================
+// 7. HEALTH CHECK
 // ===============================================
 app.get("/api/health", async (req, res) => {
   try {
@@ -358,11 +431,15 @@ app.get("/api/health", async (req, res) => {
     res.json({ 
       status: apiHealthy ? "ok" : "degraded",
       timestamp: new Date(),
+      version: "4.1",
       endpoints: [
-        "GET /api/wells",
-        "GET /api/wells/:wellId/curves",
+        "GET  /api/wells",
+        "GET  /api/wells/:wellId/curves",
         "POST /api/generate-profile",
-        "POST /api/wells-coordinates"
+        "GET  /api/maps-config",
+        "POST /api/wells-coordinates",
+        "POST /api/static-map",
+        "GET  /api/health"
       ],
       externalAPI: {
         url: API_BASE_URL,
@@ -390,7 +467,7 @@ app.get("/api/health", async (req, res) => {
 // ===============================================
 app.listen(PORT, () => {
   console.log(`
-    🚀 Curves API Server v4.0 (Perfis + Mapas Interativos)
+    🚀 Curves API Server
     ================================
     Servidor local: http://localhost:${PORT}
     API Externa: ${API_BASE_URL}
@@ -400,13 +477,10 @@ app.listen(PORT, () => {
     - GET  /api/wells              → Lista todos os poços
     - GET  /api/wells/:id/curves   → Curvas de um poço
     - POST /api/generate-profile   → Gerar perfil composto
-    - GET  /api/maps-script        → Script do Google Maps
-    - POST /api/wells-coordinates  → Buscar coordenadas (mapa)
+    - GET  /api/maps-config        → Configuração do Google Maps
+    - POST /api/wells-coordinates  → Buscar coordenadas (mapa interativo)
+    - POST /api/static-map         → Gerar URL do mapa estático
     - GET  /api/health             → Status da API
-    
-    🔐 Autenticação:
-    - Bearer token via Authorization header
-    - Token repassado para API externa
     ================================
   `);
 });

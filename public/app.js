@@ -1,7 +1,7 @@
 /* global google */
+
 // ===============================================
 // K2 SISTEMAS - VISUALIZADOR DE POÇOS
-// app.js - Lógica principal (Perfis + Mapas)
 // ===============================================
 
 // CONFIGURAÇÃO E ESTADO GLOBAL
@@ -89,7 +89,7 @@ const mapElements = {
   mapBtnText: document.getElementById("mapBtnText"),
   mapBtnLoader: document.getElementById("mapBtnLoader"),
   clearMapBtn: document.getElementById("clearMapBtn"),
-  openGoogleMapsBtn: document.getElementById("openGoogleMapsBtn"),
+  downloadMapBtn: document.getElementById("downloadMapBtn"),
   copyMapLinkBtn: document.getElementById("copyMapLinkBtn"),
   
   // Display areas
@@ -122,7 +122,7 @@ const tabElements = {
 
 /**
  * Extrai token do hash fragment da URL
- * Formato esperado: #token=abc123...
+ * Formato esperado: #token=abc123 ou #token=abc123&viewer
  */
 function extractTokenFromHash() {
   const hash = window.location.hash;
@@ -132,14 +132,14 @@ function extractTokenFromHash() {
     return null;
   }
   
-  // Extrair token do hash (#token=abc123)
+  // Extrair token do hash (#token=abc123 ou #token=abc123&viewer)
   const match = hash.match(/token=([^&]+)/);
   
   if (match && match[1]) {
     const token = match[1];
     log("Token extraído do hash", { length: token.length });
     
-    // Limpar hash da URL (segurança visual) - manter a aba se existir
+    // Limpar apenas o token da URL, manter a aba
     const currentTab = getTabFromHash();
     const newHash = currentTab ? `#${currentTab}` : "";
     window.history.replaceState(null, "", window.location.pathname + window.location.search + newHash);
@@ -201,6 +201,16 @@ function getFetchHeaders() {
   return headers;
 }
 
+/**
+ * Gera a parte do hash com token (se disponível)
+ */
+function getTokenHashPart() {
+  if (state.accessToken) {
+    return `token=${state.accessToken}&`;
+  }
+  return "";
+}
+
 // ===============================================
 // NAVEGAÇÃO POR ABAS
 // ===============================================
@@ -242,7 +252,7 @@ function switchTab(tabName) {
     tabElements.mapsContent.classList.add("active");
   }
   
-  // Atualizar hash da URL (sem recarregar)
+  // Atualizar hash da URL (sem recarregar) - SEM token por segurança
   const currentSearch = window.location.search;
   window.history.replaceState(null, "", `${window.location.pathname}${currentSearch}#${tabName}`);
   
@@ -716,15 +726,17 @@ function updateURL() {
   params.set("curves", state.selectedCurves.join(","));
   if (state.hasLito) params.set("lito", "true");
   
-  const newURL = `/?${params.toString()}#viewer`;
-  window.history.replaceState({}, "", newURL);
+  // URL visível no navegador (SEM token por segurança)
+  const visibleURL = `/?${params.toString()}#viewer`;
+  window.history.replaceState({}, "", visibleURL);
   
-  // Atualizar link compartilhável
-  const fullURL = `${window.location.origin}${newURL}`;
-  elements.generatedLink.value = fullURL;
+  // Link compartilhável (COM token para funcionar)
+  const tokenPart = getTokenHashPart();
+  const shareableURL = `${window.location.origin}/?${params.toString()}#${tokenPart}viewer`;
+  elements.generatedLink.value = shareableURL;
   elements.linkPanel.classList.remove("hidden");
   
-  log("URL atualizada", newURL);
+  log("URL atualizada", visibleURL);
 }
 
 // VERIFICAR PARÂMETROS DA URL (VIEWER)
@@ -897,8 +909,8 @@ function setupMapEventListeners() {
   // Limpar seleção
   mapElements.clearMapBtn.addEventListener("click", clearMapSelection);
   
-  // Abrir no Google Maps
-  mapElements.openGoogleMapsBtn.addEventListener("click", openInGoogleMaps);
+  // Download do mapa estático
+  mapElements.downloadMapBtn.addEventListener("click", downloadStaticMap);
   
   // Copiar link do mapa
   mapElements.copyMapLinkBtn?.addEventListener("click", copyMapLink);
@@ -973,7 +985,7 @@ function clearMapSelection() {
   
   mapElements.mapLegend.classList.add("hidden");
   mapElements.mapLinkPanel.classList.add("hidden");
-  mapElements.openGoogleMapsBtn.disabled = true;
+  mapElements.downloadMapBtn.disabled = true;
   mapElements.mapTitle.textContent = "Mapa de Localização";
   
   log("Seleção de mapa limpa");
@@ -1109,7 +1121,7 @@ async function generateMap() {
     // 3. Exibir mapa interativo
     displayMap(data);
     
-    // 4. Atualizar URL do mapa
+    // 4. Atualizar URL do mapa (com token)
     updateMapURL();
     
   } catch (error) {
@@ -1247,7 +1259,7 @@ function displayMap(data) {
     map.setZoom(12);
   }
   
-  // Salvar coordenadas para "Abrir Externo"
+  // Salvar coordenadas para download
   state.mapWellsCoordinates = wells;
   
   // Exibir legenda
@@ -1260,8 +1272,8 @@ function displayMap(data) {
   
   mapElements.mapLegend.classList.remove("hidden");
   
-  // Habilitar botão de abrir externo
-  mapElements.openGoogleMapsBtn.disabled = false;
+  // Habilitar botão de download
+  mapElements.downloadMapBtn.disabled = false;
   
   // Atualizar título
   mapElements.mapTitle.textContent = `Mapa: ${wells.length} poço(s)`;
@@ -1269,17 +1281,21 @@ function displayMap(data) {
   log("Mapa interativo exibido", { wellsCount: wells.length });
 }
 
+// ATUALIZAR URL DO MAPA
 function updateMapURL() {
   const wellIds = state.mapWells.map(w => w.id).join(",");
-  const newURL = `/?wells=${wellIds}#maps`;
-  window.history.replaceState({}, "", newURL);
   
-  // Atualizar link compartilhável
-  const fullURL = `${window.location.origin}${newURL}`;
-  mapElements.generatedMapLink.value = fullURL;
+  // URL visível no navegador (SEM token por segurança)
+  const visibleURL = `/?wells=${wellIds}#maps`;
+  window.history.replaceState({}, "", visibleURL);
+  
+  // Link compartilhável (COM token para funcionar)
+  const tokenPart = getTokenHashPart();
+  const shareableURL = `${window.location.origin}/?wells=${wellIds}#${tokenPart}maps`;
+  mapElements.generatedMapLink.value = shareableURL;
   mapElements.mapLinkPanel.classList.remove("hidden");
   
-  log("URL do mapa atualizada", newURL);
+  log("URL do mapa atualizada", visibleURL);
 }
 
 async function processMapURLParams(wellsParam) {
@@ -1312,24 +1328,61 @@ async function processMapURLParams(wellsParam) {
   }
 }
 
-function openInGoogleMaps() {
+// ===============================================
+// MAPA - DOWNLOAD ESTÁTICO
+// ===============================================
+
+async function downloadStaticMap() {
   if (!state.mapWellsCoordinates || state.mapWellsCoordinates.length === 0) {
-    log("Nenhuma coordenada disponível");
+    showMapError("Nenhuma coordenada disponível para download");
     return;
   }
   
-  if (state.mapWellsCoordinates.length === 1) {
-    // Um poço: abre direto no Google Maps
-    const well = state.mapWellsCoordinates[0];
-    window.open(`https://www.google.com/maps?q=${well.lat},${well.lng}`, "_blank");
-  } else {
-    // Múltiplos poços: abre no centro com zoom
-    const avgLat = state.mapWellsCoordinates.reduce((sum, w) => sum + w.lat, 0) / state.mapWellsCoordinates.length;
-    const avgLng = state.mapWellsCoordinates.reduce((sum, w) => sum + w.lng, 0) / state.mapWellsCoordinates.length;
-    window.open(`https://www.google.com/maps/@${avgLat},${avgLng},10z`, "_blank");
-  }
+  log("Iniciando download do mapa estático...");
   
-  log("Abrindo mapa externo");
+  try {
+    // Chamar endpoint que gera a URL do Static Maps
+    const response = await fetch(`${CONFIG.API_URL}/static-map`, {
+      method: "POST",
+      headers: getFetchHeaders(),
+      body: JSON.stringify({ 
+        wells: state.mapWellsCoordinates 
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    if (!data.mapUrl) {
+      throw new Error("URL do mapa não retornada");
+    }
+    
+    log("URL do mapa estático obtida", data.mapUrl);
+    
+    // Fazer download da imagem
+    const imgResponse = await fetch(data.mapUrl);
+    const blob = await imgResponse.blob();
+    
+    // Criar link de download
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `mapa_pocos_${state.mapWellsCoordinates.length}_${Date.now()}.png`;
+    link.click();
+    
+    // Limpar
+    URL.revokeObjectURL(url);
+    
+    log("Download do mapa estático concluído");
+    
+  } catch (error) {
+    console.error("Erro ao baixar mapa:", error);
+    showMapError(error.message || "Erro ao baixar mapa estático");
+  }
 }
 
 async function copyMapLink() {
@@ -1357,7 +1410,7 @@ async function copyMapLink() {
 // ===============================================
 
 document.addEventListener("DOMContentLoaded", async () => {
-  log("Iniciando aplicação");
+  log("Iniciando aplicação v4.1");
   
   // Carregar token
   loadToken();
@@ -1403,7 +1456,8 @@ window.CurvesAPI = {
   clearToken,
   loadToken,
   switchTab,
-  removeWellFromMap
+  removeWellFromMap,
+  downloadStaticMap
 };
 
 // Expor função de remover poço globalmente (para onclick no HTML)
