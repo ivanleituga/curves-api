@@ -1,15 +1,26 @@
 const express = require("express");
 const cors = require("cors");
+const { Pool } = require("pg");
 require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// URL da API externa
+// URL da API externa (K2 - para perfis DLIS)
 const API_BASE_URL = process.env.API_BASE_URL || "http://swk2adm1-001.k2sistemas.com.br:9095";
 
 // Google Maps API Key
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || "";
+
+// Configuração do PostgreSQL
+const pool = new Pool({
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT || 5433,
+  database: process.env.DB_NAME,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  ssl: false
+});
 
 // Middlewares
 app.use(cors());
@@ -48,7 +59,7 @@ app.use(extractBearerToken);
 
 /**
  * Converte coordenada de graus:minutos:segundos para decimal
- * Exemplo: "-22:41:58,383" → -22.6995
+ * Formato do banco: "-18:22:40,186" → -18.3778
  */
 function convertGMSToDecimal(gmsString) {
   if (!gmsString) return null;
@@ -60,7 +71,7 @@ function convertGMSToDecimal(gmsString) {
   const negative = gmsString.startsWith("-");
   gmsString = gmsString.replace("-", "");
   
-  // Separar partes
+  // Separar partes (graus:minutos:segundos)
   const parts = gmsString.split(":");
   if (parts.length !== 3) return null;
   
@@ -114,13 +125,11 @@ function generateStaticMapUrl(wells) {
 }
 
 // ===============================================
-// PROXY PARA API EXTERNA
+// 1. LISTAR POÇOS COM DLIS (API K2 - para Perfis)
 // ===============================================
-
-// 1. LISTAR TODOS OS POÇOS
 app.get("/api/wells", async (req, res) => {
   try {
-    console.log("📋 Buscando poços da API externa...");
+    console.log("📋 Buscando poços da API externa (DLIS)...");
     
     // Incluir Bearer token se disponível
     const headers = {};
@@ -149,12 +158,12 @@ app.get("/api/wells", async (req, res) => {
     // Transformar para o formato esperado pelo frontend
     const wells = data.wells.map(wellId => ({
       id: wellId,
-      name: wellId, // A API não retorna nome descritivo
+      name: wellId,
       field: "N/A",
-      state: wellId.split("-").pop() // Extrai estado do ID
+      state: wellId.split("-").pop()
     }));
     
-    console.log(`   ✅ ${wells.length} poços retornados`);
+    console.log(`   ✅ ${wells.length} poços DLIS retornados`);
     res.json(wells);
     
   } catch (error) {
@@ -163,7 +172,54 @@ app.get("/api/wells", async (req, res) => {
   }
 });
 
-// 2. BUSCAR CURVAS DE UM POÇO
+// ===============================================
+// 2. NOVO: LISTAR POÇOS COM COORDENADAS (PostgreSQL - para Mapas)
+// ===============================================
+app.get("/api/wells-geo", async (req, res) => {
+  try {
+    console.log("🗺️  Buscando poços com coordenadas do PostgreSQL...");
+    
+    const sql = `
+      SELECT "Poço", "Latitude da Base", "Longitude da Base"
+      FROM well_generalinfo_view
+      WHERE "Latitude da Base" IS NOT NULL 
+        AND "Longitude da Base" IS NOT NULL
+      ORDER BY "Poço"
+    `;
+    
+    const result = await pool.query(sql);
+    
+    // Converter coordenadas GMS → Decimal
+    const wells = result.rows
+      .map(row => {
+        const lat = convertGMSToDecimal(row["Latitude da Base"]);
+        const lng = convertGMSToDecimal(row["Longitude da Base"]);
+        
+        if (lat && lng) {
+          return {
+            id: row["Poço"],
+            name: row["Poço"],
+            state: row["Poço"].split("-").pop(),
+            lat,
+            lng
+          };
+        }
+        return null;
+      })
+      .filter(w => w !== null);
+    
+    console.log(`   ✅ ${wells.length} poços com coordenadas válidas`);
+    res.json(wells);
+    
+  } catch (error) {
+    console.error("❌ Erro ao buscar poços do PostgreSQL:", error);
+    res.status(500).json({ error: "Erro ao buscar poços com coordenadas" });
+  }
+});
+
+// ===============================================
+// 3. BUSCAR CURVAS DE UM POÇO (API K2)
+// ===============================================
 app.get("/api/wells/:wellId/curves", async (req, res) => {
   try {
     const { wellId } = req.params;
@@ -208,7 +264,9 @@ app.get("/api/wells/:wellId/curves", async (req, res) => {
   }
 });
 
-// 3. GERAR PERFIL
+// ===============================================
+// 4. GERAR PERFIL (API K2)
+// ===============================================
 app.post("/api/generate-profile", async (req, res) => {
   try {
     const { well, curves, hasLito } = req.body;
@@ -281,7 +339,7 @@ app.post("/api/generate-profile", async (req, res) => {
 });
 
 // ===============================================
-// 4. CONFIG DO GOOGLE MAPS
+// 5. CONFIG DO GOOGLE MAPS
 // ===============================================
 app.get("/api/maps-config", (req, res) => {
   res.json({
@@ -290,7 +348,7 @@ app.get("/api/maps-config", (req, res) => {
 });
 
 // ===============================================
-// 5. BUSCAR COORDENADAS DE POÇOS (MAPA INTERATIVO)
+// 6. BUSCAR COORDENADAS DE POÇOS (PostgreSQL - para mapa)
 // ===============================================
 app.post("/api/wells-coordinates", async (req, res) => {
   try {
@@ -313,58 +371,44 @@ app.post("/api/wells-coordinates", async (req, res) => {
     
     console.log(`🗺️  Buscando coordenadas para ${wellNames.length} poço(s)`);
     
-    // Incluir Bearer token se disponível
-    const headers = {
-      "Content-Type": "application/json"
-    };
+    const placeholders = wellNames.map((_, i) => `$${i + 1}`).join(", ");
+    const sql = `
+      SELECT "Poço", "Latitude da Base", "Longitude da Base"
+      FROM well_generalinfo_view
+      WHERE "Poço" IN (${placeholders})
+    `;
     
-    if (req.bearerToken) {
-      headers["Authorization"] = `Bearer ${req.bearerToken}`;
-      console.log("   🔑 Bearer token incluído na requisição");
-    }
+    const result = await pool.query(sql, wellNames);
     
-    // Buscar coordenadas da API externa (endpoint de coordenadas)
-    const response = await fetch(`${API_BASE_URL}/wells/coordinates`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ wells: wellNames })
-    });
+    // Converter coordenadas GMS → Decimal
+    const wells = result.rows
+      .map(row => {
+        const lat = convertGMSToDecimal(row["Latitude da Base"]);
+        const lng = convertGMSToDecimal(row["Longitude da Base"]);
+        
+        if (lat && lng) {
+          return {
+            name: row["Poço"],
+            lat,
+            lng,
+            state: row["Poço"].split("-").pop()
+          };
+        }
+        return null;
+      })
+      .filter(w => w !== null);
     
-    let wellsWithCoordinates = [];
-    
-    if (response.ok) {
-      // API externa retornou as coordenadas
-      const data = await response.json();
-      wellsWithCoordinates = data.wells || [];
-    } else {
-      // Fallback: retornar coordenadas mock para teste
-      // TODO: Integrar com o banco de dados real
-      console.log("   ⚠️  Endpoint /wells/coordinates não disponível na API externa");
-      console.log("   ⚠️  Usando coordenadas de exemplo (integrar com banco)");
-      
-      wellsWithCoordinates = wellNames.map((name, index) => ({
-        name: name,
-        lat: -22.0 - (index * 0.5),  // Coordenadas de exemplo
-        lng: -40.0 - (index * 0.5),
-        state: name.split("-").pop()
-      }));
-    }
-    
-    // Filtrar apenas poços com coordenadas válidas
-    const validWells = wellsWithCoordinates.filter(w => w.lat && w.lng);
-    
-    if (validWells.length === 0) {
+    if (wells.length === 0) {
       return res.status(404).json({
         error: "Nenhum poço com coordenadas válidas encontrado"
       });
     }
     
-    console.log(`   ✅ Coordenadas obtidas para ${validWells.length} poço(s)`);
+    console.log(`   ✅ Coordenadas obtidas para ${wells.length} poço(s)`);
     
-    // Retornar apenas as coordenadas (o mapa interativo será criado no frontend)
     res.json({
-      wells: validWells,
-      count: validWells.length
+      wells,
+      count: wells.length
     });
     
   } catch (error) {
@@ -374,7 +418,7 @@ app.post("/api/wells-coordinates", async (req, res) => {
 });
 
 // ===============================================
-// 6. GERAR MAPA ESTÁTICO (PARA DOWNLOAD)
+// 7. GERAR MAPA ESTÁTICO (PARA DOWNLOAD)
 // ===============================================
 app.post("/api/static-map", (req, res) => {
   try {
@@ -414,7 +458,7 @@ app.post("/api/static-map", (req, res) => {
 });
 
 // ===============================================
-// 7. HEALTH CHECK
+// 8. HEALTH CHECK
 // ===============================================
 app.get("/api/health", async (req, res) => {
   try {
@@ -424,29 +468,43 @@ app.get("/api/health", async (req, res) => {
       headers["Authorization"] = `Bearer ${req.bearerToken}`;
     }
     
-    // Verificar se a API externa está respondendo
-    const response = await fetch(`${API_BASE_URL}/wells`, { headers });
-    const apiHealthy = response.ok;
+    // Verificar API K2
+    let k2Status = "offline";
+    try {
+      const response = await fetch(`${API_BASE_URL}/wells`, { headers });
+      k2Status = response.ok ? "online" : "offline";
+    } catch {
+      k2Status = "offline";
+    }
+    
+    // Verificar PostgreSQL
+    let dbStatus = "offline";
+    try {
+      await pool.query("SELECT 1");
+      dbStatus = "online";
+    } catch {
+      dbStatus = "offline";
+    }
+    
+    const allHealthy = k2Status === "online" && dbStatus === "online";
     
     res.json({ 
-      status: apiHealthy ? "ok" : "degraded",
+      status: allHealthy ? "ok" : "degraded",
       timestamp: new Date(),
-      version: "4.1",
-      endpoints: [
-        "GET  /api/wells",
-        "GET  /api/wells/:wellId/curves",
-        "POST /api/generate-profile",
-        "GET  /api/maps-config",
-        "POST /api/wells-coordinates",
-        "POST /api/static-map",
-        "GET  /api/health"
-      ],
-      externalAPI: {
-        url: API_BASE_URL,
-        status: apiHealthy ? "online" : "offline"
-      },
-      googleMaps: {
-        configured: !!GOOGLE_MAPS_API_KEY
+      version: "5.0",
+      services: {
+        k2API: {
+          url: API_BASE_URL,
+          status: k2Status
+        },
+        postgresql: {
+          host: process.env.DB_HOST,
+          database: process.env.DB_NAME,
+          status: dbStatus
+        },
+        googleMaps: {
+          configured: !!GOOGLE_MAPS_API_KEY
+        }
       },
       authentication: {
         tokenPresent: !!req.bearerToken,
@@ -467,20 +525,24 @@ app.get("/api/health", async (req, res) => {
 // ===============================================
 app.listen(PORT, () => {
   console.log(`
-    🚀 Curves API Server
-    ================================
-    Servidor local: http://localhost:${PORT}
-    API Externa: ${API_BASE_URL}
-    Google Maps: ${GOOGLE_MAPS_API_KEY ? "✅ Configurado" : "⚠️  Não configurado"}
+    🚀 Curves API Server v5.0
+    ==========================================
+    Servidor: http://localhost:${PORT}
     
-    📍 Endpoints disponíveis:
-    - GET  /api/wells              → Lista todos os poços
+    📡 Fontes de dados:
+    - API K2 (Perfis): ${API_BASE_URL}
+    - PostgreSQL (Mapas): ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}
+    - Google Maps: ${GOOGLE_MAPS_API_KEY ? "✅ Configurado" : "⚠️  Não configurado"}
+    
+    📍 Endpoints:
+    - GET  /api/wells              → Poços com DLIS (API K2)
+    - GET  /api/wells-geo          → Poços com coordenadas (PostgreSQL)
     - GET  /api/wells/:id/curves   → Curvas de um poço
     - POST /api/generate-profile   → Gerar perfil composto
-    - GET  /api/maps-config        → Configuração do Google Maps
-    - POST /api/wells-coordinates  → Buscar coordenadas (mapa interativo)
-    - POST /api/static-map         → Gerar URL do mapa estático
-    - GET  /api/health             → Status da API
-    ================================
+    - GET  /api/maps-config        → Configuração Google Maps
+    - POST /api/wells-coordinates  → Coordenadas para mapa
+    - POST /api/static-map         → URL do mapa estático
+    - GET  /api/health             → Status dos serviços
+    ==========================================
   `);
 });

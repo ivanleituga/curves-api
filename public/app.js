@@ -13,7 +13,7 @@ const CONFIG = {
 
 const state = {
   // ===== VIEWER (Perfis) =====
-  wells: [],
+  wells: [],              // Poços com DLIS (API K2)
   selectedWell: null,
   availableCurves: [],
   selectedCurves: [],
@@ -24,6 +24,7 @@ const state = {
   lastParams: null,
   
   // ===== MAPA =====
+  geoWells: [],           // Poços com coordenadas (PostgreSQL)
   mapWells: [],           // Poços selecionados para o mapa
   mapWellsCoordinates: [], // Coordenadas dos poços no mapa
   mapInstance: null,      // Instância do Google Maps
@@ -358,6 +359,9 @@ async function checkAPIHealth() {
       elements.apiStatus.textContent = "Conectada";
       elements.apiStatus.style.color = "var(--success)";
       log("API Health Check", data);
+    } else {
+      elements.apiStatus.textContent = "Degradada";
+      elements.apiStatus.style.color = "var(--warning)";
     }
   } catch (error) {
     elements.apiStatus.textContent = "Offline";
@@ -367,12 +371,12 @@ async function checkAPIHealth() {
 }
 
 // ===============================================
-// CARREGAR LISTA DE POÇOS
+// CARREGAR LISTA DE POÇOS DLIS (API K2 - para Perfis)
 // ===============================================
 
 async function loadWells() {
   try {
-    log("Carregando lista de poços");
+    log("Carregando poços DLIS (API K2)...");
     
     const response = await fetch(`${CONFIG.API_URL}/wells`, {
       headers: getFetchHeaders()
@@ -389,21 +393,57 @@ async function loadWells() {
     const wells = await response.json();
     
     state.wells = wells;
-    log(`${wells.length} poços carregados`);
+    log(`${wells.length} poços DLIS carregados`);
     
-    // Preencher datalist do viewer
+    // Preencher datalist APENAS do viewer (perfis)
     elements.wellsList.innerHTML = wells.map(well => 
-      `<option value="${well.id}">${well.name} - ${well.field} (${well.state})</option>`
-    ).join("");
-    
-    // Preencher datalist do mapa
-    mapElements.wellsDatalist.innerHTML = wells.map(well => 
-      `<option value="${well.id}">${well.name} - ${well.field} (${well.state})</option>`
+      `<option value="${well.id}">${well.name} (${well.state})</option>`
     ).join("");
     
   } catch (error) {
-    log("Erro ao carregar poços", error);
+    log("Erro ao carregar poços DLIS", error);
     showError("Erro ao carregar lista de poços");
+  }
+}
+
+// ===============================================
+// CARREGAR LISTA DE POÇOS COM COORDENADAS (PostgreSQL - para Mapas)
+// ===============================================
+
+async function loadGeoWells() {
+  try {
+    log("Carregando poços com coordenadas (PostgreSQL)...");
+    
+    const response = await fetch(`${CONFIG.API_URL}/wells-geo`, {
+      headers: getFetchHeaders()
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const wells = await response.json();
+    
+    state.geoWells = wells;
+    log(`${wells.length} poços com coordenadas carregados`);
+    
+    // Preencher datalist APENAS do mapa
+    mapElements.wellsDatalist.innerHTML = wells.map(well => 
+      `<option value="${well.id}">${well.name} (${well.state})</option>`
+    ).join("");
+    
+    // Atualizar status do mapa
+    if (mapElements.mapsApiStatus) {
+      mapElements.mapsApiStatus.textContent = `${wells.length} poços`;
+      mapElements.mapsApiStatus.style.color = "var(--success)";
+    }
+    
+  } catch (error) {
+    log("Erro ao carregar poços com coordenadas", error);
+    if (mapElements.mapsApiStatus) {
+      mapElements.mapsApiStatus.textContent = "Erro";
+      mapElements.mapsApiStatus.style.color = "var(--danger)";
+    }
   }
 }
 
@@ -454,7 +494,7 @@ function handleWellInput(e) {
 async function handleWellSelection(e) {
   const wellId = e.target.value;
   
-  // Verificar se é um poço válido
+  // Verificar se é um poço válido (busca em wells - DLIS)
   const well = state.wells.find(w => w.id === wellId);
   if (!well) {
     log("Poço não encontrado", wellId);
@@ -941,10 +981,10 @@ function addWellToMap() {
     return;
   }
   
-  // Verificar se o poço existe
-  const well = state.wells.find(w => w.id === wellId);
+  // ALTERADO: Buscar na lista de poços COM COORDENADAS (geoWells)
+  const well = state.geoWells.find(w => w.id === wellId);
   if (!well) {
-    showMapError(`Poço "${wellId}" não encontrado`);
+    showMapError(`Poço "${wellId}" não encontrado ou sem coordenadas`);
     return;
   }
   
@@ -1304,15 +1344,14 @@ async function processMapURLParams(wellsParam) {
   // Mudar para aba de mapas
   switchTab("maps");
   
-  // Aguardar wells carregarem
-  if (state.wells.length === 0) {
+  if (state.geoWells.length === 0) {
     await new Promise(resolve => setTimeout(resolve, 500));
   }
   
   // Adicionar poços
   const wellIds = wellsParam.split(",");
   wellIds.forEach(wellId => {
-    const well = state.wells.find(w => w.id === wellId.trim());
+    const well = state.geoWells.find(w => w.id === wellId.trim());
     if (well && !state.mapWells.find(w => w.id === well.id)) {
       state.mapWells.push(well);
     }
@@ -1410,7 +1449,7 @@ async function copyMapLink() {
 // ===============================================
 
 document.addEventListener("DOMContentLoaded", async () => {
-  log("Iniciando aplicação v4.1");
+  log("Iniciando aplicação v5.0");
   
   // Carregar token
   loadToken();
@@ -1433,8 +1472,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Verificar saúde da API
   await checkAPIHealth();
   
-  // Carregar lista de poços
-  await loadWells();
+  // Carregar AMBAS as listas em paralelo
+  await Promise.all([
+    loadWells(),    // Poços DLIS (API K2) - para Perfis
+    loadGeoWells()  // Poços com coordenadas (PostgreSQL) - para Mapas
+  ]);
   
   // Configurar event listeners
   setupEventListeners();
