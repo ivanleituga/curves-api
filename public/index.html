@@ -64,9 +64,7 @@
                             autocomplete="off"
                             required
                         >
-                        <datalist id="wells-list">
-                            <!-- Preenchido dinamicamente pelo JavaScript -->
-                        </datalist>
+                        <datalist id="wells-list"></datalist>
                         <small class="help-text">Digite o código ou selecione da lista</small>
                     </div>
 
@@ -148,27 +146,27 @@
                         </button>
                         <button id="fullscreenBtn" class="btn-action" disabled title="Tela cheia">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+                                <polyline points="15 3 21 3 21 9"></polyline>
+                                <polyline points="9 21 3 21 3 15"></polyline>
+                                <line x1="21" y1="3" x2="14" y2="10"></line>
+                                <line x1="3" y1="21" x2="10" y2="14"></line>
                             </svg>
-                            Expandir
                         </button>
                     </div>
                 </div>
 
                 <div id="imageContainer" class="image-container">
                     <div class="placeholder">
-                        <svg width="150" height="150" viewBox="0 0 150 150">
-                            <rect width="150" height="150" fill="#e9ecef" rx="8"/>
-                            <line x1="30" y1="50" x2="120" y2="50" stroke="#adb5bd" stroke-width="2"/>
-                            <line x1="30" y1="75" x2="120" y2="75" stroke="#adb5bd" stroke-width="2"/>
-                            <line x1="30" y1="100" x2="120" y2="100" stroke="#adb5bd" stroke-width="2"/>
-                            <circle cx="75" cy="75" r="40" fill="none" stroke="#ced4da" stroke-width="2" stroke-dasharray="5,5"/>
+                        <svg width="150" height="150" viewBox="0 0 24 24" fill="none" stroke="#adb5bd" stroke-width="1">
+                            <line x1="18" y1="20" x2="18" y2="10"></line>
+                            <line x1="12" y1="20" x2="12" y2="4"></line>
+                            <line x1="6" y1="20" x2="6" y2="14"></line>
                         </svg>
-                        <p>Configure os parâmetros e clique em "Gerar Perfil"</p>
+                        <p>Selecione um poço e curvas para visualizar o perfil</p>
                     </div>
                 </div>
 
-                <!-- Mensagens de erro (oculto por padrão) -->
+                <!-- Mensagens de erro -->
                 <div id="errorContainer" class="error-container hidden">
                     <div class="error-message">
                         <strong>Erro:</strong>
@@ -187,21 +185,16 @@
             <!-- Painel de Controles do Mapa (Lateral Esquerdo) -->
             <aside class="control-panel">
                 <h2>Localização de Poços</h2>
-                
-                <!-- Lista de poços no mapa -->
+
+                <!-- Lista de Poços Selecionados -->
                 <div class="form-group">
-                    <label>
-                        Poços Selecionados
-                        <span id="mapWellCount" class="well-count">(0)</span>
-                    </label>
+                    <label>Poços Selecionados <span id="mapWellCount">(0)</span></label>
                     <div id="mapWellsList" class="map-wells-list">
-                        <div class="placeholder-text">
-                            Nenhum poço selecionado
-                        </div>
+                        <div class="placeholder-text">Nenhum poço selecionado</div>
                     </div>
                 </div>
 
-                <!-- Campo para adicionar poço -->
+                <!-- Adicionar Poço -->
                 <div class="form-group">
                     <label for="mapWellInput">Adicionar Poço</label>
                     <div class="input-with-button">
@@ -212,16 +205,14 @@
                             placeholder="Digite o nome do poço..."
                             autocomplete="off"
                         >
-                        <datalist id="map-wells-datalist">
-                            <!-- Preenchido dinamicamente -->
-                        </datalist>
-                        <button type="button" id="addWellBtn" class="btn-add" title="Adicionar poço">
+                        <button type="button" id="addWellBtn" class="btn-add" title="Adicionar">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="12" y1="5" x2="12" y2="19"></line>
                                 <line x1="5" y1="12" x2="19" y2="12"></line>
                             </svg>
                         </button>
                     </div>
+                    <datalist id="map-wells-datalist"></datalist>
                     <small class="help-text">Máximo de 25 poços por mapa</small>
                 </div>
 
@@ -289,13 +280,7 @@
                         </svg>
                         <p>Adicione poços e clique em "Gerar Mapa"</p>
                     </div>
-                    <div id="googleMap" style="display: none; width: 100%; height: 500px;"></div>
-                </div>
-
-                <!-- Legenda do Mapa -->
-                <div id="mapLegend" class="map-legend hidden">
-                    <h4>Legenda</h4>
-                    <div id="legendContent"></div>
+                    <div id="googleMap" style="display: none; width: 100%; height: 100%;"></div>
                 </div>
 
                 <!-- Mensagens de erro do mapa -->
@@ -311,7 +296,7 @@
 
     <!-- Footer -->
     <footer class="main-footer">
-        <p>© 2026 K2 Sistemas - Visualizador de Poços | Versão 4.0</p>
+        <p>© 2026 K2 Sistemas - Visualizador de Poços | Versão 5.0</p>
         <button id="toggleDebug" class="btn-link">Debug</button>
     </footer>
 

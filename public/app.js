@@ -2,6 +2,7 @@
 
 // ===============================================
 // K2 SISTEMAS - VISUALIZADOR DE POÇOS
+// Versão 5.0 - Listas separadas (DLIS + PostgreSQL)
 // ===============================================
 
 // CONFIGURAÇÃO E ESTADO GLOBAL
@@ -13,7 +14,7 @@ const CONFIG = {
 
 const state = {
   // ===== VIEWER (Perfis) =====
-  wells: [],              // Poços com DLIS (API K2)
+  wells: [],
   selectedWell: null,
   availableCurves: [],
   selectedCurves: [],
@@ -24,15 +25,15 @@ const state = {
   lastParams: null,
   
   // ===== MAPA =====
-  geoWells: [],           // Poços com coordenadas (PostgreSQL)
-  mapWells: [],           // Poços selecionados para o mapa
-  mapWellsCoordinates: [], // Coordenadas dos poços no mapa
-  mapInstance: null,      // Instância do Google Maps
-  mapMarkers: [],         // Marcadores no mapa
-  googleMapsLoaded: false, // Flag para saber se API foi carregada
+  geoWells: [],
+  mapWells: [],
+  mapWellsCoordinates: [],
+  mapInstance: null,
+  mapMarkers: [],
+  googleMapsLoaded: false,
   
   // ===== NAVEGAÇÃO =====
-  currentTab: "viewer",   // "viewer" ou "maps"
+  currentTab: "viewer",
   
   // ===== AUTENTICAÇÃO =====
   accessToken: null
@@ -40,14 +41,11 @@ const state = {
 
 // ELEMENTOS DO DOM - VIEWER
 const elements = {
-  // Form
   form: document.getElementById("profileForm"),
   wellInput: document.getElementById("wellInput"),
   wellsList: document.getElementById("wells-list"),
   curvesContainer: document.getElementById("curvesContainer"),
   hasLitoInput: document.getElementById("hasLitoInput"),
-  
-  // Buttons
   generateBtn: document.getElementById("generateBtn"),
   btnText: document.getElementById("btnText"),
   btnLoader: document.getElementById("btnLoader"),
@@ -55,36 +53,25 @@ const elements = {
   fullscreenBtn: document.getElementById("fullscreenBtn"),
   toggleDebug: document.getElementById("toggleDebug"),
   clearDebug: document.getElementById("clearDebug"),
-  
-  // Display areas
   imageContainer: document.getElementById("imageContainer"),
   vizTitle: document.getElementById("vizTitle"),
   errorContainer: document.getElementById("errorContainer"),
   errorText: document.getElementById("errorText"),
-  
-  // Status
   statusText: document.getElementById("statusText"),
   lastUpdate: document.getElementById("lastUpdate"),
   apiStatus: document.getElementById("apiStatus"),
-  
-  // Link
   linkPanel: document.getElementById("linkPanel"),
   generatedLink: document.getElementById("generatedLink"),
-  
-  // Debug
   debugPanel: document.getElementById("debugPanel"),
   debugContent: document.getElementById("debugContent")
 };
 
 // ELEMENTOS DO DOM - MAPA
 const mapElements = {
-  // Inputs
   wellInput: document.getElementById("mapWellInput"),
   wellsDatalist: document.getElementById("map-wells-datalist"),
   wellsList: document.getElementById("mapWellsList"),
   wellCount: document.getElementById("mapWellCount"),
-  
-  // Buttons
   addWellBtn: document.getElementById("addWellBtn"),
   generateMapBtn: document.getElementById("generateMapBtn"),
   mapBtnText: document.getElementById("mapBtnText"),
@@ -92,20 +79,12 @@ const mapElements = {
   clearMapBtn: document.getElementById("clearMapBtn"),
   downloadMapBtn: document.getElementById("downloadMapBtn"),
   copyMapLinkBtn: document.getElementById("copyMapLinkBtn"),
-  
-  // Display areas
   mapContainer: document.getElementById("mapContainer"),
   mapTitle: document.getElementById("mapTitle"),
-  mapLegend: document.getElementById("mapLegend"),
-  legendContent: document.getElementById("legendContent"),
   mapErrorContainer: document.getElementById("mapErrorContainer"),
   mapErrorText: document.getElementById("mapErrorText"),
-  
-  // Status
   mapStatusCount: document.getElementById("mapStatusCount"),
   mapsApiStatus: document.getElementById("mapsApiStatus"),
-  
-  // Link
   mapLinkPanel: document.getElementById("mapLinkPanel"),
   generatedMapLink: document.getElementById("generatedMapLink")
 };
@@ -121,10 +100,6 @@ const tabElements = {
 // GERENCIAMENTO DE TOKEN
 // ===============================================
 
-/**
- * Extrai token do hash fragment da URL
- * Formato esperado: #token=abc123 ou #token=abc123&viewer
- */
 function extractTokenFromHash() {
   const hash = window.location.hash;
   
@@ -133,14 +108,12 @@ function extractTokenFromHash() {
     return null;
   }
   
-  // Extrair token do hash (#token=abc123 ou #token=abc123&viewer)
   const match = hash.match(/token=([^&]+)/);
   
   if (match && match[1]) {
     const token = match[1];
     log("Token extraído do hash", { length: token.length });
     
-    // Limpar apenas o token da URL, manter a aba
     const currentTab = getTabFromHash();
     const newHash = currentTab ? `#${currentTab}` : "";
     window.history.replaceState(null, "", window.location.pathname + window.location.search + newHash);
@@ -151,11 +124,7 @@ function extractTokenFromHash() {
   return null;
 }
 
-/**
- * Carrega token do sessionStorage ou hash
- */
 function loadToken() {
-  // Primeiro, tenta extrair do hash (prioridade)
   const hashToken = extractTokenFromHash();
   
   if (hashToken) {
@@ -165,7 +134,6 @@ function loadToken() {
     return hashToken;
   }
   
-  // Se não há token no hash, tenta recuperar do sessionStorage
   const storedToken = sessionStorage.getItem("api_token");
   
   if (storedToken) {
@@ -178,22 +146,14 @@ function loadToken() {
   return null;
 }
 
-/**
- * Remove token da sessão
- */
 function clearToken() {
   sessionStorage.removeItem("api_token");
   state.accessToken = null;
   log("Token removido da sessão");
 }
 
-/**
- * Adiciona Authorization header nas requisições
- */
 function getFetchHeaders() {
-  const headers = {
-    "Content-Type": "application/json"
-  };
+  const headers = { "Content-Type": "application/json" };
   
   if (state.accessToken) {
     headers["Authorization"] = `Bearer ${state.accessToken}`;
@@ -202,23 +162,14 @@ function getFetchHeaders() {
   return headers;
 }
 
-/**
- * Gera a parte do hash com token (se disponível)
- */
 function getTokenHashPart() {
-  if (state.accessToken) {
-    return `token=${state.accessToken}&`;
-  }
-  return "";
+  return state.accessToken ? `token=${state.accessToken}&` : "";
 }
 
 // ===============================================
 // NAVEGAÇÃO POR ABAS
 // ===============================================
 
-/**
- * Extrai a aba do hash da URL
- */
 function getTabFromHash() {
   const hash = window.location.hash;
   if (hash.includes("maps")) return "maps";
@@ -226,25 +177,15 @@ function getTabFromHash() {
   return null;
 }
 
-/**
- * Muda para a aba especificada
- */
 function switchTab(tabName) {
   log("Mudando para aba", tabName);
   
-  // Atualizar estado
   state.currentTab = tabName;
   
-  // Atualizar botões das abas
   tabElements.tabButtons.forEach(btn => {
-    if (btn.dataset.tab === tabName) {
-      btn.classList.add("active");
-    } else {
-      btn.classList.remove("active");
-    }
+    btn.classList.toggle("active", btn.dataset.tab === tabName);
   });
   
-  // Atualizar conteúdo visível
   if (tabName === "viewer") {
     tabElements.viewerContent.classList.add("active");
     tabElements.mapsContent.classList.remove("active");
@@ -253,25 +194,17 @@ function switchTab(tabName) {
     tabElements.mapsContent.classList.add("active");
   }
   
-  // Atualizar hash da URL (sem recarregar) - SEM token por segurança
   const currentSearch = window.location.search;
   window.history.replaceState(null, "", `${window.location.pathname}${currentSearch}#${tabName}`);
   
   log("Aba ativa", tabName);
 }
 
-/**
- * Configura event listeners das abas
- */
 function setupTabNavigation() {
   tabElements.tabButtons.forEach(btn => {
-    btn.addEventListener("click", () => {
-      const tabName = btn.dataset.tab;
-      switchTab(tabName);
-    });
+    btn.addEventListener("click", () => switchTab(btn.dataset.tab));
   });
   
-  // Detectar mudança de hash (navegação do browser)
   window.addEventListener("hashchange", () => {
     const tab = getTabFromHash();
     if (tab && tab !== state.currentTab) {
@@ -284,7 +217,6 @@ function setupTabNavigation() {
 // FUNÇÕES AUXILIARES
 // ===============================================
 
-// Logger para debug
 function log(label, data = null) {
   if (!CONFIG.DEBUG_MODE) return;
   
@@ -300,7 +232,6 @@ function log(label, data = null) {
   }
 }
 
-// Atualizar status
 function updateStatus(message, type = "info") {
   const colors = {
     info: "#6b7280",
@@ -317,7 +248,6 @@ function updateStatus(message, type = "info") {
   }
 }
 
-// Mostrar erro (viewer)
 function showError(message) {
   elements.errorContainer.classList.remove("hidden");
   elements.errorText.textContent = message;
@@ -325,20 +255,17 @@ function showError(message) {
   log("ERRO", message);
 }
 
-// Limpar erro (viewer)
 function clearError() {
   elements.errorContainer.classList.add("hidden");
   elements.errorText.textContent = "";
 }
 
-// Mostrar erro (mapa)
 function showMapError(message) {
   mapElements.mapErrorContainer.classList.remove("hidden");
   mapElements.mapErrorText.textContent = message;
   log("ERRO MAPA", message);
 }
 
-// Limpar erro (mapa)
 function clearMapError() {
   mapElements.mapErrorContainer.classList.add("hidden");
   mapElements.mapErrorText.textContent = "";
@@ -382,7 +309,6 @@ async function loadWells() {
       headers: getFetchHeaders()
     });
     
-    // Tratar erro 401 (não autorizado)
     if (response.status === 401) {
       showError("Não autenticado. Token inválido ou ausente.");
       log("Erro 401: Token inválido");
@@ -395,7 +321,6 @@ async function loadWells() {
     state.wells = wells;
     log(`${wells.length} poços DLIS carregados`);
     
-    // Preencher datalist APENAS do viewer (perfis)
     elements.wellsList.innerHTML = wells.map(well => 
       `<option value="${well.id}">${well.name} (${well.state})</option>`
     ).join("");
@@ -427,12 +352,10 @@ async function loadGeoWells() {
     state.geoWells = wells;
     log(`${wells.length} poços com coordenadas carregados`);
     
-    // Preencher datalist APENAS do mapa
     mapElements.wellsDatalist.innerHTML = wells.map(well => 
       `<option value="${well.id}">${well.name} (${well.state})</option>`
     ).join("");
     
-    // Atualizar status do mapa
     if (mapElements.mapsApiStatus) {
       mapElements.mapsApiStatus.textContent = `${wells.length} poços`;
       mapElements.mapsApiStatus.style.color = "var(--success)";
@@ -452,35 +375,27 @@ async function loadGeoWells() {
 // ===============================================
 
 function setupEventListeners() {
-  // Formulário
   elements.form.addEventListener("submit", generateProfile);
-  
-  // Input de poço
   elements.wellInput.addEventListener("change", handleWellSelection);
   elements.wellInput.addEventListener("input", handleWellInput);
   
-  // Checkbox litologia
   elements.hasLitoInput.addEventListener("change", (e) => {
     state.hasLito = e.target.checked;
     log("Litologia alterada", state.hasLito);
   });
   
-  // Botões
   elements.downloadBtn.addEventListener("click", downloadImage);
   document.getElementById("copyBtn")?.addEventListener("click", copyLink);
   elements.fullscreenBtn.addEventListener("click", toggleFullscreen);
   elements.toggleDebug.addEventListener("click", toggleDebug);
   elements.clearDebug.addEventListener("click", clearDebugPanel);
   
-  // Atalhos de teclado
   document.addEventListener("keydown", handleKeyPress);
 }
 
-// MANIPULAR SELEÇÃO DE POÇO
 function handleWellInput(e) {
   const value = e.target.value;
   
-  // Se o campo foi limpo, resetar seleção
   if (!value && state.selectedWell) {
     log("Resetando seleção de poço");
     state.selectedWell = null;
@@ -494,7 +409,6 @@ function handleWellInput(e) {
 async function handleWellSelection(e) {
   const wellId = e.target.value;
   
-  // Verificar se é um poço válido (busca em wells - DLIS)
   const well = state.wells.find(w => w.id === wellId);
   if (!well) {
     log("Poço não encontrado", wellId);
@@ -504,23 +418,19 @@ async function handleWellSelection(e) {
   log("Poço selecionado", well);
   state.selectedWell = well;
   
-  // Carregar curvas disponíveis
   await loadWellCurves(wellId);
 }
 
-// CARREGAR CURVAS DO POÇO
 async function loadWellCurves(wellId) {
   try {
     clearError();
     
-    // Mostrar loading
     elements.curvesContainer.innerHTML = "<div class=\"placeholder-text\">Carregando curvas...</div>";
     
     const response = await fetch(`${CONFIG.API_URL}/wells/${wellId}/curves`, {
       headers: getFetchHeaders()
     });
     
-    // Tratar erro 401
     if (response.status === 401) {
       showError("Não autenticado. Token inválido ou ausente.");
       log("Erro 401: Token inválido");
@@ -546,7 +456,6 @@ async function loadWellCurves(wellId) {
   }
 }
 
-// EXIBIR SELETOR DE CURVAS
 function displayCurveSelector(curves) {
   elements.curvesContainer.classList.add("has-curves");
   
@@ -561,28 +470,23 @@ function displayCurveSelector(curves) {
     </div>
   `;
   
-  // Adicionar event listeners
   document.querySelectorAll(".curve-chip").forEach(chip => {
     chip.addEventListener("click", () => toggleCurveSelection(chip));
   });
 }
 
-// TOGGLE SELEÇÃO DE CURVA
 function toggleCurveSelection(chip) {
   const curve = chip.dataset.curve;
   
   if (chip.classList.contains("selected")) {
-    // Remover seleção
     chip.classList.remove("selected");
     state.selectedCurves = state.selectedCurves.filter(c => c !== curve);
   } else {
-    // Verificar limite
     if (state.selectedCurves.length >= state.maxCurves) {
       showMaxReachedFeedback();
       return;
     }
     
-    // Adicionar seleção
     chip.classList.add("selected");
     state.selectedCurves.push(curve);
   }
@@ -591,13 +495,11 @@ function toggleCurveSelection(chip) {
   updateURL();
 }
 
-// ATUALIZAR UI DE SELEÇÃO
 function updateCurveSelectionUI() {
   const count = state.selectedCurves.length;
   const counter = document.getElementById("selectionCount");
   if (counter) counter.textContent = count;
   
-  // Desabilitar não-selecionados se atingiu o limite
   const allChips = document.querySelectorAll(".curve-chip");
   
   if (count >= state.maxCurves) {
@@ -610,22 +512,17 @@ function updateCurveSelectionUI() {
     allChips.forEach(chip => chip.classList.remove("disabled"));
   }
   
-  // Habilitar/desabilitar botão gerar
   elements.generateBtn.disabled = count === 0;
   
   log("Seleção atualizada", { count, curves: state.selectedCurves });
 }
 
-// FEEDBACK MÁXIMO ATINGIDO
 function showMaxReachedFeedback() {
   const container = document.querySelector(".curves-selector");
   container.classList.add("shake");
-  setTimeout(() => {
-    container.classList.remove("shake");
-  }, 300);
+  setTimeout(() => container.classList.remove("shake"), 300);
 }
 
-// RESETAR DISPLAY DE CURVAS
 function resetCurvesDisplay() {
   elements.curvesContainer.classList.remove("has-curves");
   elements.curvesContainer.innerHTML = "<div class=\"placeholder-text\">Selecione um poço primeiro</div>";
@@ -638,19 +535,16 @@ function resetCurvesDisplay() {
 async function generateProfile(e) {
   if (e) e.preventDefault();
   
-  // Validar seleção
   if (!state.selectedWell || state.selectedCurves.length === 0) {
     showError("Selecione um poço e pelo menos uma curva");
     return;
   }
   
-  // Validar token
   if (!state.accessToken) {
     showError("Token de autenticação não disponível. Recarregue a página com um link válido.");
     return;
   }
   
-  // Preparar parâmetros
   const params = {
     well: state.selectedWell.id,
     curves: state.selectedCurves,
@@ -660,7 +554,6 @@ async function generateProfile(e) {
   log("Gerando perfil", params);
   state.lastParams = params;
   
-  // Mostrar loading
   showLoading();
   
   try {
@@ -670,7 +563,6 @@ async function generateProfile(e) {
       body: JSON.stringify(params)
     });
     
-    // Tratar erro 401
     if (response.status === 401) {
       throw new Error("Token inválido ou expirado. Solicite um novo link.");
     }
@@ -680,14 +572,10 @@ async function generateProfile(e) {
       throw new Error(errorData.error || `HTTP ${response.status}`);
     }
     
-    // Converter resposta para blob
     const blob = await response.blob();
     const imageUrl = URL.createObjectURL(blob);
     
-    // Exibir imagem
     displayImage(imageUrl, params);
-    
-    // Atualizar URL
     updateURL();
     
     log("Perfil gerado com sucesso");
@@ -696,7 +584,6 @@ async function generateProfile(e) {
     console.error("Erro ao gerar perfil:", error);
     showError(error.message || "Erro ao gerar o perfil. Tente novamente.");
     
-    // Se erro de autenticação, limpar token
     if (error.message.includes("Token")) {
       clearToken();
     }
@@ -705,14 +592,13 @@ async function generateProfile(e) {
   }
 }
 
-// MOSTRAR/ESCONDER LOADING
 function showLoading() {
   state.isLoading = true;
   elements.generateBtn.disabled = true;
   elements.btnText.classList.add("hidden");
   elements.btnLoader.classList.remove("hidden");
   
-  const loadingHTML = `
+  elements.imageContainer.innerHTML = `
     <div class="loading-overlay">
       <div class="loading-content">
         <div class="loading-spinner"></div>
@@ -724,7 +610,6 @@ function showLoading() {
     </div>
   `;
   
-  elements.imageContainer.innerHTML = loadingHTML;
   updateStatus("Processando...", "info");
 }
 
@@ -735,7 +620,6 @@ function hideLoading() {
   elements.btnLoader.classList.add("hidden");
 }
 
-// EXIBIR IMAGEM
 function displayImage(imageUrl, params) {
   elements.imageContainer.innerHTML = `
     <img src="${imageUrl}" 
@@ -753,10 +637,8 @@ function displayImage(imageUrl, params) {
   log("Perfil exibido", { well: params.well, curves: params.curves });
 }
 
-// ATUALIZAR URL SEM RECARREGAR
 function updateURL() {
   if (!state.selectedWell || state.selectedCurves.length === 0) {
-    // Limpar URL se não há seleção completa
     window.history.replaceState({}, "", "/#viewer");
     return;
   }
@@ -766,11 +648,9 @@ function updateURL() {
   params.set("curves", state.selectedCurves.join(","));
   if (state.hasLito) params.set("lito", "true");
   
-  // URL visível no navegador (SEM token por segurança)
   const visibleURL = `/?${params.toString()}#viewer`;
   window.history.replaceState({}, "", visibleURL);
   
-  // Link compartilhável (COM token para funcionar)
   const tokenPart = getTokenHashPart();
   const shareableURL = `${window.location.origin}/?${params.toString()}#${tokenPart}viewer`;
   elements.generatedLink.value = shareableURL;
@@ -779,7 +659,6 @@ function updateURL() {
   log("URL atualizada", visibleURL);
 }
 
-// VERIFICAR PARÂMETROS DA URL (VIEWER)
 async function checkURLParams() {
   const urlParams = new URLSearchParams(window.location.search);
   
@@ -787,10 +666,8 @@ async function checkURLParams() {
   const curvesParam = urlParams.get("curves");
   const hasLito = urlParams.get("lito") === "true";
   
-  // Verificar se tem parâmetros de mapa
   const wellsParam = urlParams.get("wells");
   if (wellsParam) {
-    // Tem parâmetros de mapa, processar na aba de mapas
     await processMapURLParams(wellsParam);
     return;
   }
@@ -802,28 +679,23 @@ async function checkURLParams() {
   
   log("Parâmetros encontrados na URL", { wellId, curves: curvesParam, hasLito });
   
-  // Aguardar wells carregarem
   if (state.wells.length === 0) {
     await new Promise(resolve => setTimeout(resolve, 500));
   }
   
-  // Verificar se o poço existe
   const well = state.wells.find(w => w.id === wellId);
   if (!well) {
     log("Poço da URL não encontrado", wellId);
     return;
   }
   
-  // Preencher campos
   elements.wellInput.value = wellId;
   elements.hasLitoInput.checked = hasLito;
   state.hasLito = hasLito;
   state.selectedWell = well;
   
-  // Carregar curvas
   await loadWellCurves(wellId);
   
-  // Selecionar curvas da URL
   const curves = curvesParam.split(",");
   curves.forEach(curve => {
     const chip = document.querySelector(`[data-curve="${curve}"]`);
@@ -832,7 +704,6 @@ async function checkURLParams() {
     }
   });
   
-  // Gerar perfil automaticamente
   if (state.selectedCurves.length > 0) {
     log("Gerando perfil automaticamente da URL");
     setTimeout(() => generateProfile(), 500);
@@ -843,7 +714,6 @@ async function checkURLParams() {
 // FUNÇÕES DE AÇÃO - VIEWER
 // ===============================================
 
-// Download da imagem
 function downloadImage() {
   if (!state.currentImageUrl || !state.lastParams) return;
   
@@ -855,7 +725,6 @@ function downloadImage() {
   log("Download iniciado", { well: state.lastParams.well });
 }
 
-// Tela cheia
 function toggleFullscreen() {
   const img = elements.imageContainer.querySelector("img");
   if (!img) return;
@@ -871,26 +740,21 @@ function toggleFullscreen() {
   log("Tela cheia ativada");
 }
 
-// Toggle debug panel
 function toggleDebug() {
   elements.debugPanel.classList.toggle("hidden");
 }
 
-// Limpar debug
 function clearDebugPanel() {
   elements.debugContent.textContent = "";
   log("Debug limpo");
 }
 
-// Copiar link
 async function copyLink() {
   const input = elements.generatedLink;
   const btn = document.getElementById("copyBtn");
   
-  // Copiar texto
   await navigator.clipboard.writeText(input.value);
   
-  // Feedback visual
   const originalHTML = btn.innerHTML;
   btn.innerHTML = "✓";
   btn.style.background = "var(--success)";
@@ -903,9 +767,7 @@ async function copyLink() {
   log("Link copiado", input.value);
 }
 
-// ATALHOS DE TECLADO
 function handleKeyPress(e) {
-  // Ctrl/Cmd + Enter para gerar
   if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && !state.isLoading) {
     if (state.currentTab === "viewer") {
       generateProfile();
@@ -914,13 +776,11 @@ function handleKeyPress(e) {
     }
   }
   
-  // Ctrl/Cmd + D para debug
   if ((e.ctrlKey || e.metaKey) && e.key === "d") {
     e.preventDefault();
     toggleDebug();
   }
   
-  // Ctrl/Cmd + S para download
   if ((e.ctrlKey || e.metaKey) && e.key === "s" && state.currentImageUrl) {
     e.preventDefault();
     downloadImage();
@@ -932,10 +792,8 @@ function handleKeyPress(e) {
 // ===============================================
 
 function setupMapEventListeners() {
-  // Adicionar poço
   mapElements.addWellBtn.addEventListener("click", addWellToMap);
   
-  // Enter no input adiciona o poço
   mapElements.wellInput.addEventListener("keypress", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -943,16 +801,9 @@ function setupMapEventListeners() {
     }
   });
   
-  // Gerar mapa
   mapElements.generateMapBtn.addEventListener("click", generateMap);
-  
-  // Limpar seleção
   mapElements.clearMapBtn.addEventListener("click", clearMapSelection);
-  
-  // Download do mapa estático
   mapElements.downloadMapBtn.addEventListener("click", downloadStaticMap);
-  
-  // Copiar link do mapa
   mapElements.copyMapLinkBtn?.addEventListener("click", copyMapLink);
 }
 
@@ -968,33 +819,26 @@ function addWellToMap() {
     return;
   }
   
-  // Verificar se já está na lista
   if (state.mapWells.find(w => w.id === wellId)) {
     log("Poço já está na lista", wellId);
     mapElements.wellInput.value = "";
     return;
   }
   
-  // Verificar limite
   if (state.mapWells.length >= CONFIG.MAX_MAP_WELLS) {
     showMapError(`Máximo de ${CONFIG.MAX_MAP_WELLS} poços por mapa`);
     return;
   }
   
-  // ALTERADO: Buscar na lista de poços COM COORDENADAS (geoWells)
   const well = state.geoWells.find(w => w.id === wellId);
   if (!well) {
     showMapError(`Poço "${wellId}" não encontrado ou sem coordenadas`);
     return;
   }
   
-  // Adicionar à lista
   state.mapWells.push(well);
-  
-  // Limpar input
   mapElements.wellInput.value = "";
   
-  // Atualizar UI
   updateMapWellsDisplay();
   clearMapError();
   
@@ -1012,18 +856,15 @@ function clearMapSelection() {
   state.mapWellsCoordinates = [];
   updateMapWellsDisplay();
   
-  // Limpar marcadores do mapa
   state.mapMarkers.forEach(marker => marker.setMap(null));
   state.mapMarkers = [];
   
-  // Resetar visualização - mostrar placeholder, esconder mapa
   const placeholder = document.getElementById("mapPlaceholder");
   const mapDiv = document.getElementById("googleMap");
   
   if (placeholder) placeholder.style.display = "flex";
   if (mapDiv) mapDiv.style.display = "none";
   
-  mapElements.mapLegend.classList.add("hidden");
   mapElements.mapLinkPanel.classList.add("hidden");
   mapElements.downloadMapBtn.disabled = true;
   mapElements.mapTitle.textContent = "Mapa de Localização";
@@ -1035,14 +876,10 @@ function updateMapWellsDisplay() {
   const count = state.mapWells.length;
   const labels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   
-  // Atualizar contador
   mapElements.wellCount.textContent = `(${count})`;
   mapElements.mapStatusCount.textContent = count;
-  
-  // Atualizar botão gerar
   mapElements.generateMapBtn.disabled = count === 0;
   
-  // Atualizar lista
   if (count === 0) {
     mapElements.wellsList.innerHTML = "<div class=\"placeholder-text\">Nenhum poço selecionado</div>";
   } else {
@@ -1067,20 +904,14 @@ function updateMapWellsDisplay() {
 // MAPA - CARREGAR GOOGLE MAPS API
 // ===============================================
 
-/**
- * Carrega o Google Maps JavaScript API dinamicamente
- * Retorna uma Promise que resolve quando a API estiver pronta
- */
 function loadGoogleMapsAPI() {
   return new Promise((resolve, reject) => {
-    // Se já carregou, resolve imediatamente
     if (state.googleMapsLoaded && window.google && window.google.maps) {
       log("Google Maps API já carregada");
       resolve();
       return;
     }
     
-    // Buscar API key do servidor primeiro
     fetch("/api/maps-config")
       .then(response => {
         if (!response.ok) {
@@ -1095,14 +926,12 @@ function loadGoogleMapsAPI() {
         
         log("API Key obtida, carregando Google Maps...");
         
-        // Definir callback global ANTES de criar o script
         window.initGoogleMapsCallback = function() {
           log("Google Maps API carregada com sucesso");
           state.googleMapsLoaded = true;
           resolve();
         };
         
-        // Criar e adicionar script tag
         const script = document.createElement("script");
         script.src = `https://maps.googleapis.com/maps/api/js?key=${config.apiKey}&callback=initGoogleMapsCallback`;
         script.async = true;
@@ -1136,11 +965,9 @@ async function generateMap() {
   showMapLoading();
   
   try {
-    // 1. Carregar Google Maps API se ainda não carregou
     log("Verificando Google Maps API...");
     await loadGoogleMapsAPI();
     
-    // 2. Buscar coordenadas dos poços
     const wellNames = state.mapWells.map(w => w.id);
     log("Buscando coordenadas para poços", wellNames);
     
@@ -1158,10 +985,7 @@ async function generateMap() {
     const data = await response.json();
     log("Coordenadas recebidas", data);
     
-    // 3. Exibir mapa interativo
     displayMap(data);
-    
-    // 4. Atualizar URL do mapa (com token)
     updateMapURL();
     
   } catch (error) {
@@ -1177,27 +1001,23 @@ function showMapLoading() {
   mapElements.mapBtnText.classList.add("hidden");
   mapElements.mapBtnLoader.classList.remove("hidden");
   
-  // Esconder placeholder e mapa
   const placeholder = document.getElementById("mapPlaceholder");
   const mapDiv = document.getElementById("googleMap");
   
   if (placeholder) placeholder.style.display = "none";
   if (mapDiv) mapDiv.style.display = "none";
   
-  // Mostrar loading (criar se não existir)
   let loadingEl = document.getElementById("mapLoadingOverlay");
   if (!loadingEl) {
     loadingEl = document.createElement("div");
     loadingEl.id = "mapLoadingOverlay";
     loadingEl.className = "loading-overlay";
-    loadingEl.style.cssText = "display: flex; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.95); align-items: center; justify-content: center; border-radius: 0.5rem;";
     loadingEl.innerHTML = `
       <div class="loading-content">
         <div class="loading-spinner"></div>
         <p>Carregando mapa...</p>
       </div>
     `;
-    mapElements.mapContainer.style.position = "relative";
     mapElements.mapContainer.appendChild(loadingEl);
   } else {
     loadingEl.style.display = "flex";
@@ -1209,7 +1029,6 @@ function hideMapLoading() {
   mapElements.mapBtnText.classList.remove("hidden");
   mapElements.mapBtnLoader.classList.add("hidden");
   
-  // Esconder loading
   const loadingEl = document.getElementById("mapLoadingOverlay");
   if (loadingEl) {
     loadingEl.style.display = "none";
@@ -1217,38 +1036,35 @@ function hideMapLoading() {
 }
 
 function displayMap(data) {
-  const { wells } = data;
   const labels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   
-  // Esconder placeholder, mostrar div do mapa
+  // Reordenar wells para corresponder à ordem de state.mapWells
+  const wells = state.mapWells.map(mapWell => {
+    return data.wells.find(w => w.name === mapWell.id) || null;
+  }).filter(w => w !== null);
+  
   const placeholder = document.getElementById("mapPlaceholder");
   const mapDiv = document.getElementById("googleMap");
   
   if (placeholder) placeholder.style.display = "none";
   if (mapDiv) mapDiv.style.display = "block";
   
-  // Calcular centro do mapa (média das coordenadas)
   const avgLat = wells.reduce((sum, w) => sum + w.lat, 0) / wells.length;
   const avgLng = wells.reduce((sum, w) => sum + w.lng, 0) / wells.length;
   
-  // Criar mapa
   const map = new google.maps.Map(mapDiv, {
     center: { lat: avgLat, lng: avgLng },
     zoom: 8,
     mapTypeId: "terrain"
   });
   
-  // Salvar instância do mapa
   state.mapInstance = map;
   
-  // Limpar marcadores antigos
   state.mapMarkers.forEach(marker => marker.setMap(null));
   state.mapMarkers = [];
   
-  // Criar bounds para ajustar zoom automaticamente
   const bounds = new google.maps.LatLngBounds();
   
-  // Adicionar marcadores
   wells.forEach((well, index) => {
     const position = { lat: well.lat, lng: well.lng };
     
@@ -1263,7 +1079,6 @@ function displayMap(data) {
       title: well.name
     });
     
-    // InfoWindow ao clicar no marcador
     const infoWindow = new google.maps.InfoWindow({
       content: `
         <div style="padding: 8px;">
@@ -1283,11 +1098,9 @@ function displayMap(data) {
     bounds.extend(position);
   });
   
-  // Ajustar zoom para mostrar todos os marcadores
   if (wells.length > 1) {
     map.fitBounds(bounds);
     
-    // Limitar zoom máximo para não ficar muito próximo
     const listener = google.maps.event.addListener(map, "idle", () => {
       if (map.getZoom() > 14) {
         map.setZoom(14);
@@ -1295,41 +1108,23 @@ function displayMap(data) {
       google.maps.event.removeListener(listener);
     });
   } else {
-    // Se só tem 1 poço, zoom fixo
     map.setZoom(12);
   }
   
-  // Salvar coordenadas para download
   state.mapWellsCoordinates = wells;
   
-  // Exibir legenda
-  mapElements.legendContent.innerHTML = wells.map((well, index) => `
-    <div class="legend-item">
-      <span class="legend-marker">${labels[index]}</span>
-      <span>${well.name} (${well.state || "N/A"})</span>
-    </div>
-  `).join("");
-  
-  mapElements.mapLegend.classList.remove("hidden");
-  
-  // Habilitar botão de download
   mapElements.downloadMapBtn.disabled = false;
-  
-  // Atualizar título
   mapElements.mapTitle.textContent = `Mapa: ${wells.length} poço(s)`;
   
   log("Mapa interativo exibido", { wellsCount: wells.length });
 }
 
-// ATUALIZAR URL DO MAPA
 function updateMapURL() {
   const wellIds = state.mapWells.map(w => w.id).join(",");
   
-  // URL visível no navegador (SEM token por segurança)
   const visibleURL = `/?wells=${wellIds}#maps`;
   window.history.replaceState({}, "", visibleURL);
   
-  // Link compartilhável (COM token para funcionar)
   const tokenPart = getTokenHashPart();
   const shareableURL = `${window.location.origin}/?wells=${wellIds}#${tokenPart}maps`;
   mapElements.generatedMapLink.value = shareableURL;
@@ -1341,14 +1136,12 @@ function updateMapURL() {
 async function processMapURLParams(wellsParam) {
   log("Processando parâmetros de mapa da URL", wellsParam);
   
-  // Mudar para aba de mapas
   switchTab("maps");
   
   if (state.geoWells.length === 0) {
     await new Promise(resolve => setTimeout(resolve, 500));
   }
   
-  // Adicionar poços
   const wellIds = wellsParam.split(",");
   wellIds.forEach(wellId => {
     const well = state.geoWells.find(w => w.id === wellId.trim());
@@ -1357,10 +1150,8 @@ async function processMapURLParams(wellsParam) {
     }
   });
   
-  // Atualizar UI
   updateMapWellsDisplay();
   
-  // Gerar mapa automaticamente
   if (state.mapWells.length > 0) {
     log("Gerando mapa automaticamente da URL");
     setTimeout(() => generateMap(), 500);
@@ -1380,13 +1171,10 @@ async function downloadStaticMap() {
   log("Iniciando download do mapa estático...");
   
   try {
-    // Chamar endpoint que gera a URL do Static Maps
     const response = await fetch(`${CONFIG.API_URL}/static-map`, {
       method: "POST",
       headers: getFetchHeaders(),
-      body: JSON.stringify({ 
-        wells: state.mapWellsCoordinates 
-      })
+      body: JSON.stringify({ wells: state.mapWellsCoordinates })
     });
     
     if (!response.ok) {
@@ -1402,18 +1190,15 @@ async function downloadStaticMap() {
     
     log("URL do mapa estático obtida", data.mapUrl);
     
-    // Fazer download da imagem
     const imgResponse = await fetch(data.mapUrl);
     const blob = await imgResponse.blob();
     
-    // Criar link de download
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
     link.download = `mapa_pocos_${state.mapWellsCoordinates.length}_${Date.now()}.png`;
     link.click();
     
-    // Limpar
     URL.revokeObjectURL(url);
     
     log("Download do mapa estático concluído");
@@ -1428,10 +1213,8 @@ async function copyMapLink() {
   const input = mapElements.generatedMapLink;
   const btn = mapElements.copyMapLinkBtn;
   
-  // Copiar texto
   await navigator.clipboard.writeText(input.value);
   
-  // Feedback visual
   const originalHTML = btn.innerHTML;
   btn.innerHTML = "✓";
   btn.style.background = "var(--success)";
@@ -1451,7 +1234,6 @@ async function copyMapLink() {
 document.addEventListener("DOMContentLoaded", async () => {
   log("Iniciando aplicação v5.0");
   
-  // Carregar token
   loadToken();
   
   if (state.accessToken) {
@@ -1462,27 +1244,21 @@ document.addEventListener("DOMContentLoaded", async () => {
     updateStatus("Sem autenticação", "warning");
   }
   
-  // Configurar navegação por abas
   setupTabNavigation();
   
-  // Verificar aba inicial (do hash)
   const initialTab = getTabFromHash() || "viewer";
   switchTab(initialTab);
   
-  // Verificar saúde da API
   await checkAPIHealth();
   
-  // Carregar AMBAS as listas em paralelo
   await Promise.all([
-    loadWells(),    // Poços DLIS (API K2) - para Perfis
-    loadGeoWells()  // Poços com coordenadas (PostgreSQL) - para Mapas
+    loadWells(),
+    loadGeoWells()
   ]);
   
-  // Configurar event listeners
   setupEventListeners();
   setupMapEventListeners();
   
-  // Verificar se há parâmetros na URL
   await checkURLParams();
   
   log("Aplicação inicializada");
@@ -1502,5 +1278,4 @@ window.CurvesAPI = {
   downloadStaticMap
 };
 
-// Expor função de remover poço globalmente (para onclick no HTML)
 window.removeWellFromMap = removeWellFromMap;
