@@ -142,14 +142,14 @@ body {
 
 .container {
     display: flex;
-    align-items: stretch; /* IMPORTANTE: faz os filhos terem mesma altura */
+    align-items: stretch;
     gap: 1.5rem;
     max-width: 1400px;
     width: 100%;
     margin: 1.5rem auto;
     padding: 0 1.5rem;
     flex: 1;
-    min-height: 600px; /* Altura mínima consistente */
+    min-height: 600px;
 }
 
 /* ===============================================
@@ -162,7 +162,6 @@ body {
     padding: 1.5rem;
     width: 360px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    /* SEM height: fit-content - deixa o flexbox controlar */
     display: flex;
     flex-direction: column;
 }
@@ -571,7 +570,7 @@ body {
     align-items: center;
     padding: 1rem 1.5rem;
     border-bottom: 1px solid var(--gray-200);
-    flex-shrink: 0; /* Não encolhe */
+    flex-shrink: 0;
 }
 
 .viz-header h2 {
@@ -607,7 +606,7 @@ body {
    =============================================== */
 
 .map-container {
-    flex: 1; /* IMPORTANTE: ocupa todo o espaço restante */
+    flex: 1;
     background: var(--gray-50);
     border-radius: 0.5rem;
     display: flex;
@@ -616,12 +615,12 @@ body {
     position: relative;
     overflow: hidden;
     padding: 1rem;
-    min-height: 400px; /* Altura mínima para garantir visibilidade */
+    min-height: 400px;
 }
 
 .map-container #googleMap {
     width: 100%;
-    height: 100%; /* IMPORTANTE: preenche todo o container */
+    height: 100%;
     border-radius: 0.5rem;
 }
 
@@ -924,4 +923,194 @@ body {
     .main-header p {
         display: none;
     }
+}
+
+/* ===============================================
+   FILTROS POR BACIA/CAMPO (v6.0 - Estilizado)
+   =============================================== */
+
+.filter-section {
+    border-top: 1px solid var(--gray-200);
+    padding-top: 0.75rem;
+    margin-top: 0.25rem;
+}
+
+.filter-card {
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 0.5rem;
+    padding: 0.875rem;
+}
+
+.filter-field {
+    margin-bottom: 0.625rem;
+}
+
+.filter-field:last-of-type {
+    margin-bottom: 0;
+}
+
+.filter-field-label {
+    display: block;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--gray-500);
+    margin-bottom: 0.3rem;
+}
+
+.form-select {
+    width: 100%;
+    padding: 0.5rem 2rem 0.5rem 0.625rem;
+    border: 1px solid var(--gray-300);
+    border-radius: 0.375rem;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 0.8125rem;
+    font-weight: 450;
+    color: var(--gray-700);
+    background: white;
+    cursor: pointer;
+    transition: all 0.2s;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.625rem center;
+}
+
+.form-select:hover:not(:disabled) {
+    border-color: var(--primary-light);
+}
+
+.form-select:focus {
+    outline: none;
+    border-color: var(--primary-light);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.form-select:disabled {
+    background-color: var(--gray-100);
+    color: var(--gray-400);
+    cursor: not-allowed;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23d1d5db' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+}
+
+.filter-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 0.75rem;
+}
+
+.filter-count {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 0.75rem;
+    color: var(--gray-500);
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.filter-count.has-results {
+    color: var(--success);
+    font-weight: 500;
+}
+
+.btn-add-filter {
+    padding: 0.4375rem 0.875rem;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    background: linear-gradient(135deg, var(--primary-blue), var(--primary-light));
+    color: white;
+    border: none;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+
+.btn-add-filter:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(30, 58, 138, 0.25);
+}
+
+.btn-add-filter:disabled {
+    background: var(--gray-300);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* ===============================================
+   SIDEBAR AGRUPADA POR CAMPO (v6.1)
+   =============================================== */
+
+.well-group {
+    border-bottom: 1px solid var(--gray-200);
+}
+
+.well-group:last-child {
+    border-bottom: none;
+}
+
+.well-group-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--gray-50);
+    cursor: pointer;
+    transition: background 0.15s;
+    user-select: none;
+}
+
+.well-group-header:hover {
+    background: var(--gray-100);
+}
+
+.well-group-arrow {
+    flex-shrink: 0;
+    transition: transform 0.2s;
+    color: var(--gray-500);
+}
+
+.well-group-arrow.expanded {
+    transform: rotate(90deg);
+}
+
+.well-group-name {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--gray-700);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.well-group-count {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: white;
+    background: var(--primary-light);
+    border-radius: 9999px;
+    padding: 0.125rem 0.5rem;
+    flex-shrink: 0;
+}
+
+.well-group-items {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.well-group-items .map-well-item {
+    padding-left: 1.75rem;
+    font-size: 0.75rem;
 }

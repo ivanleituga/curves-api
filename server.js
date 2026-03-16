@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const crypto = require("crypto");
 const { Pool } = require("pg");
 require("dotenv").config();
 
@@ -24,7 +25,7 @@ const pool = new Pool({
 
 // Middlewares
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "5mb" }));
 app.use(express.static("public"));
 app.set("trust proxy", true);
 
@@ -91,16 +92,25 @@ function convertGMSToDecimal(gmsString) {
 }
 
 /**
+ * Gera um ID curto e aleatório para sessões de mapa
+ * Retorna 12 caracteres hexadecimais (ex: "a1b2c3d4e5f6")
+ */
+function generateSessionId() {
+  return crypto.randomBytes(6).toString("hex");
+}
+
+/**
  * Gera URL do Google Static Maps com múltiplos marcadores
+ * Para > 26 poços, agrupa marcadores sem labels individuais
+ * para não estourar o limite de 8192 caracteres da URL
  */
 function generateStaticMapUrl(wells) {
   const baseUrl = "https://maps.googleapis.com/maps/api/staticmap";
-  const labels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   
   // Parâmetros base
   const params = new URLSearchParams();
   params.set("size", "640x480");
-  params.set("scale", "2"); // Alta resolução
+  params.set("scale", "2");
   params.set("maptype", "terrain");
   params.set("key", GOOGLE_MAPS_API_KEY);
   
@@ -112,14 +122,28 @@ function generateStaticMapUrl(wells) {
     params.set("zoom", "10");
   }
   
-  // Construir URL base
   let url = `${baseUrl}?${params.toString()}`;
   
-  // Adicionar marcadores
-  wells.forEach((well, index) => {
-    const label = labels[index] || "";
-    url += `&markers=color:red|label:${label}|${well.lat},${well.lng}`;
-  });
+  if (wells.length <= 26) {
+    // Poucos poços: marcadores com labels A-Z
+    const labels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    wells.forEach((well, index) => {
+      const label = labels[index] || "";
+      url += `&markers=color:red|label:${label}|${well.lat},${well.lng}`;
+    });
+  } else {
+    // Muitos poços: agrupar marcadores sem label individual
+    // Isso economiza URL porque todos ficam num único parâmetro &markers=
+    // Formato: &markers=color:red|size:small|lat1,lng1|lat2,lng2|...
+    
+    // Dividir em grupos para respeitar limite de URL
+    const MAX_PER_GROUP = 100;
+    for (let i = 0; i < wells.length; i += MAX_PER_GROUP) {
+      const group = wells.slice(i, i + MAX_PER_GROUP);
+      const coords = group.map(w => `${w.lat},${w.lng}`).join("|");
+      url += `&markers=color:red|size:small|${coords}`;
+    }
+  }
   
   return url;
 }
@@ -173,14 +197,15 @@ app.get("/api/wells", async (req, res) => {
 });
 
 // ===============================================
-// 2. NOVO: LISTAR POÇOS COM COORDENADAS (PostgreSQL - para Mapas)
+// 2. LISTAR POÇOS COM COORDENADAS (PostgreSQL - para Mapas)
+//    Agora inclui Bacia e Campo para filtros
 // ===============================================
 app.get("/api/wells-geo", async (req, res) => {
   try {
     console.log("🗺️  Buscando poços com coordenadas do PostgreSQL...");
     
     const sql = `
-      SELECT "Poço", "Latitude da Base", "Longitude da Base"
+      SELECT "Poço", "Latitude da Base", "Longitude da Base", "Bacia", "Campo"
       FROM well_generalinfo_view
       WHERE "Latitude da Base" IS NOT NULL 
         AND "Longitude da Base" IS NOT NULL
@@ -200,6 +225,8 @@ app.get("/api/wells-geo", async (req, res) => {
             id: row["Poço"],
             name: row["Poço"],
             state: row["Poço"].split("-").pop(),
+            bacia: row["Bacia"] || "",
+            campo: row["Campo"] || "",
             lat,
             lng
           };
@@ -349,6 +376,7 @@ app.get("/api/maps-config", (req, res) => {
 
 // ===============================================
 // 6. BUSCAR COORDENADAS DE POÇOS (PostgreSQL - para mapa)
+//    Limite de 25 removido para suportar bacias inteiras
 // ===============================================
 app.post("/api/wells-coordinates", async (req, res) => {
   try {
@@ -359,13 +387,6 @@ app.post("/api/wells-coordinates", async (req, res) => {
       return res.status(400).json({
         error: "Lista de poços é obrigatória",
         required: { wellNames: "array de strings" }
-      });
-    }
-    
-    if (wellNames.length > 25) {
-      return res.status(400).json({
-        error: "Máximo de 25 poços por mapa",
-        received: wellNames.length
       });
     }
     
@@ -458,7 +479,102 @@ app.post("/api/static-map", (req, res) => {
 });
 
 // ===============================================
-// 8. HEALTH CHECK
+// 8. CRIAR SESSÃO DE MAPA (salvar seleção no banco)
+//    Recebe lista de poços, retorna ID curto
+// ===============================================
+app.post("/api/map-sessions", async (req, res) => {
+  try {
+    const { wells, filters } = req.body;
+    
+    // Validações
+    if (!wells || !Array.isArray(wells) || wells.length === 0) {
+      return res.status(400).json({
+        error: "Lista de poços é obrigatória",
+        required: { wells: "array de strings com nomes dos poços" }
+      });
+    }
+    
+    // Gerar ID curto e aleatório
+    const sessionId = generateSessionId();
+    
+    console.log(`💾 Criando sessão de mapa: ${sessionId} (${wells.length} poços)`);
+    
+    // Inserir no banco
+    const sql = `
+      INSERT INTO map_sessions (id, wells, filters, well_count)
+      VALUES ($1, $2, $3, $4)
+      RETURNING id, well_count, created_at
+    `;
+    
+    const result = await pool.query(sql, [
+      sessionId,
+      JSON.stringify(wells),        // Array de nomes dos poços
+      filters ? JSON.stringify(filters) : null,  // Filtros usados (opcional)
+      wells.length
+    ]);
+    
+    const session = result.rows[0];
+    
+    console.log(`   ✅ Sessão criada: ${session.id}`);
+    
+    res.json({
+      sessionId: session.id,
+      wellCount: session.well_count,
+      createdAt: session.created_at
+    });
+    
+  } catch (error) {
+    console.error("❌ Erro ao criar sessão de mapa:", error);
+    res.status(500).json({ error: "Erro ao salvar seleção de poços" });
+  }
+});
+
+// ===============================================
+// 9. BUSCAR SESSÃO DE MAPA (recuperar seleção pelo ID)
+//    Recebe ID curto, retorna lista de poços
+// ===============================================
+app.get("/api/map-sessions/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    console.log(`🔍 Buscando sessão de mapa: ${id}`);
+    
+    const sql = `
+      SELECT id, wells, filters, well_count, created_at
+      FROM map_sessions
+      WHERE id = $1
+    `;
+    
+    const result = await pool.query(sql, [id]);
+    
+    if (result.rows.length === 0) {
+      console.log(`   ❌ Sessão não encontrada: ${id}`);
+      return res.status(404).json({
+        error: "Sessão não encontrada",
+        message: "Este link pode ter expirado ou ser inválido"
+      });
+    }
+    
+    const session = result.rows[0];
+    
+    console.log(`   ✅ Sessão encontrada: ${session.well_count} poços`);
+    
+    res.json({
+      sessionId: session.id,
+      wells: session.wells,           // Array JSON de nomes dos poços
+      filters: session.filters,       // Filtros usados (pode ser null)
+      wellCount: session.well_count,
+      createdAt: session.created_at
+    });
+    
+  } catch (error) {
+    console.error("❌ Erro ao buscar sessão de mapa:", error);
+    res.status(500).json({ error: "Erro ao recuperar seleção de poços" });
+  }
+});
+
+// ===============================================
+// 10. HEALTH CHECK
 // ===============================================
 app.get("/api/health", async (req, res) => {
   try {
@@ -491,7 +607,7 @@ app.get("/api/health", async (req, res) => {
     res.json({ 
       status: allHealthy ? "ok" : "degraded",
       timestamp: new Date(),
-      version: "5.0",
+      version: "6.0",
       services: {
         k2API: {
           url: API_BASE_URL,
@@ -525,7 +641,7 @@ app.get("/api/health", async (req, res) => {
 // ===============================================
 app.listen(PORT, () => {
   console.log(`
-    🚀 Curves API Server v5.0
+    🚀 Curves API Server v6.0
     ==========================================
     Servidor: http://localhost:${PORT}
     
@@ -536,12 +652,14 @@ app.listen(PORT, () => {
     
     📍 Endpoints:
     - GET  /api/wells              → Poços com DLIS (API K2)
-    - GET  /api/wells-geo          → Poços com coordenadas (PostgreSQL)
+    - GET  /api/wells-geo          → Poços com coordenadas + bacia/campo (PostgreSQL)
     - GET  /api/wells/:id/curves   → Curvas de um poço
     - POST /api/generate-profile   → Gerar perfil composto
     - GET  /api/maps-config        → Configuração Google Maps
     - POST /api/wells-coordinates  → Coordenadas para mapa
     - POST /api/static-map         → URL do mapa estático
+    - POST /api/map-sessions       → Criar sessão (salvar seleção)
+    - GET  /api/map-sessions/:id   → Buscar sessão (recuperar seleção)
     - GET  /api/health             → Status dos serviços
     ==========================================
   `);
