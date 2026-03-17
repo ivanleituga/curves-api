@@ -278,31 +278,6 @@ function clearMapError() {
   mapElements.mapErrorText.textContent = "";
 }
 
-/**
- * Gera label para marcadores no mapa
- * 0-25 → A, B, C, ..., Z
- * 26-51 → AA, AB, AC, ..., AZ
- * 52-77 → BA, BB, BC, ..., BZ
- * E assim por diante...
- */
-function getMarkerLabel(index) {
-  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  
-  if (index < 26) {
-    // Primeira rodada: A-Z
-    return letters[index];
-  }
-  
-  // Depois de Z: AA, AB, ..., AZ, BA, BB, ...
-  const firstLetter = letters[Math.floor((index - 26) / 26)];
-  const secondLetter = letters[(index - 26) % 26];
-  
-  // Se ultrapassar ZZ (702 labels), retorna vazio
-  if (!firstLetter || !secondLetter) return "";
-  
-  return firstLetter + secondLetter;
-}
-
 // ===============================================
 // VERIFICAR SAÚDE DA API
 // ===============================================
@@ -342,9 +317,7 @@ async function loadWells() {
     });
     
     if (response.status === 401) {
-      showError("Não autenticado. Token inválido ou ausente.");
-      log("Erro 401: Token inválido");
-      clearToken();
+      log("Erro 401 na API DLIS - token pode ser inválido ou API inacessível");
       return;
     }
     
@@ -1095,11 +1068,11 @@ function updateMapWellsDisplay() {
   }
   
   if (count <= 26) {
-    // Lista plana com labels A-Z (comportamento original para poucos poços)
-    mapElements.wellsList.innerHTML = state.mapWells.map((well, index) => `
+    // Lista plana com nomes dos poços (para poucos poços)
+    mapElements.wellsList.innerHTML = state.mapWells.map((well) => `
       <div class="map-well-item">
         <span class="well-label">
-          <span class="well-marker">${getMarkerLabel(index)}</span>
+          <span class="well-marker-dot"></span>
           <span>${well.id}</span>
         </span>
         <button class="btn-remove" onclick="removeWellFromMap('${well.id}')" title="Remover">
@@ -1344,58 +1317,65 @@ function displayMap(data) {
   
   const bounds = new google.maps.LatLngBounds();
   
-  // Com mais de 26 poços, usa MarkerClusterer + nome do poço no pin
-  // Com 26 ou menos, mantém labels A-Z (comportamento original)
+  // Com mais de 26 poços, usa MarkerClusterer para agrupar
   const useCluster = wells.length > 26;
   
-  wells.forEach((well, index) => {
+  // Ícone padrão com labelOrigin posicionado abaixo do pin
+  // Isso faz a etiqueta com nome do poço aparecer embaixo do marcador
+  const pinIcon = {
+    url: "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
+    scaledSize: new google.maps.Size(32, 32),
+    labelOrigin: new google.maps.Point(16, 44)
+  };
+  
+  wells.forEach((well) => {
     const position = { lat: well.lat, lng: well.lng };
+    
+    // Buscar dados completos (bacia, campo) do geoWells
+    const fullWell = state.mapWells.find(mw => mw.id === well.name);
+    const bacia = fullWell ? fullWell.bacia : "";
+    const campo = fullWell ? fullWell.campo : "";
     
     const markerOptions = {
       position: position,
       // Se usar clusterer, NÃO adiciona ao mapa diretamente
-      // O clusterer gerencia a exibição dos marcadores
       map: useCluster ? null : map,
-      title: well.name
+      title: well.name,
+      icon: pinIcon,
+      // Nome do poço como label com classe CSS para fundo escuro
+      label: {
+        text: well.name,
+        className: "well-pin-label"
+      }
     };
     
-    if (useCluster) {
-      // Nome do poço como label (visível apenas quando desclusterizado)
-      markerOptions.label = {
-        text: well.name,
-        color: "white",
-        fontWeight: "bold",
-        fontSize: "9px"
-      };
-    } else {
-      // Labels A-Z para conjuntos pequenos
-      const label = getMarkerLabel(index);
-      if (label) {
-        markerOptions.label = {
-          text: label,
-          color: "white",
-          fontWeight: "bold",
-          fontSize: label.length > 1 ? "10px" : "12px"
-        };
-      }
-    }
-    
     const marker = new google.maps.Marker(markerOptions);
-    
-    // Guardar o ID do poço no marcador para referência futura
     marker.wellId = well.name;
     
+    // InfoWindow rico com bacia, campo, estado, coordenadas e botão "Ver Perfil"
     const infoWindow = new google.maps.InfoWindow({
       content: `
-        <div style="padding: 8px;">
-          <strong>${well.name}</strong><br>
-          <small>Estado: ${well.state || "N/A"}</small><br>
-          <small>Lat: ${well.lat.toFixed(6)}</small><br>
-          <small>Lng: ${well.lng.toFixed(6)}</small>
+        <div style="font-family: 'Inter', -apple-system, sans-serif; width: 240px;">
+          <div style="background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; padding: 14px; text-align: center;">
+            <div style="font-size: 0.9375rem; font-weight: 600;">${well.name}</div>
+          </div>
+          <div style="padding: 12px;">
+            <div style="display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 0.8125rem; color: #374151;">
+              ${bacia ? `<span style="color: #6b7280; font-weight: 500;">Bacia</span><span>${bacia}</span>` : ""}
+              ${campo ? `<span style="color: #6b7280; font-weight: 500;">Campo</span><span>${campo}</span>` : ""}
+              <span style="color: #6b7280; font-weight: 500;">Estado</span><span>${well.state || "N/A"}</span>
+              <span style="color: #6b7280; font-weight: 500;">Lat</span><span>${well.lat.toFixed(6)}</span>
+              <span style="color: #6b7280; font-weight: 500;">Lng</span><span>${well.lng.toFixed(6)}</span>
+            </div>
+            <button onclick="viewWellProfile('${well.name}')"
+              style="margin-top: 10px; width: 100%; padding: 7px; background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; border: none; border-radius: 4px; font-size: 0.8125rem; font-weight: 500; cursor: pointer; font-family: 'Inter', -apple-system, sans-serif;">
+              Ver Perfil
+            </button>
+          </div>
         </div>
       `
     });
-    
+        
     marker.addListener("click", () => {
       infoWindow.open(map, marker);
     });
@@ -1432,6 +1412,28 @@ function displayMap(data) {
   mapElements.mapTitle.textContent = `Mapa: ${wells.length} poço(s)`;
   
   log("Mapa interativo exibido", { wellsCount: wells.length, clustered: useCluster });
+}
+
+/**
+ * Abre a aba de Perfis com o poço selecionado
+ * Chamado pelo botão "Ver Perfil" no InfoWindow do mapa
+ */
+function viewWellProfile(wellId) {
+  // Mudar para a aba de perfis
+  switchTab("viewer");
+  
+  // Preencher o input com o poço
+  elements.wellInput.value = wellId;
+  
+  // Tentar encontrar o poço na lista de DLIS
+  const well = state.wells.find(w => w.id === wellId);
+  if (well) {
+    state.selectedWell = well;
+    loadWellCurves(wellId);
+    log("Perfil aberto do mapa", wellId);
+  } else {
+    log("Poço não encontrado na lista DLIS (pode não ter DLIS)", wellId);
+  }
 }
 
 // ===============================================
@@ -1712,8 +1714,10 @@ window.CurvesAPI = {
   loadToken,
   switchTab,
   removeWellFromMap,
-  downloadStaticMap
+  downloadStaticMap,
+  viewWellProfile
 };
 
 window.removeWellFromMap = removeWellFromMap;
 window.toggleWellGroup = toggleWellGroup;
+window.viewWellProfile = viewWellProfile;
