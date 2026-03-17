@@ -8,6 +8,18 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
+    <!-- Overlay de carregamento inicial -->
+    <div id="appLoadingOverlay" class="app-loading-overlay">
+        <div class="app-loading-content">
+            <img src="logo-k2.png" alt="K2 Sistemas" class="app-loading-logo">
+            <div class="app-loading-bar-track">
+                <div class="app-loading-bar-fill"></div>
+            </div>
+            <p class="app-loading-text">Carregando visualizador...</p>
+            <p class="app-loading-version">v7.0</p>
+        </div>
+    </div>
+
     <!-- Header Principal com Logo -->
     <header class="main-header">
         <div class="header-container">
@@ -207,7 +219,7 @@
                     <datalist id="map-wells-datalist"></datalist>
                 </div>
 
-                <!-- NOVO v6.0: Filtro por Bacia e Campo -->
+                <!-- NOVO v7.0: Filtro por Bacia e Campo -->
                 <div class="form-group filter-section">
                     <label>Adicionar por Bacia / Campo</label>
                     
@@ -314,7 +326,7 @@
 
     <!-- Footer -->
     <footer class="main-footer">
-        <p>&copy; 2026 K2 Sistemas - Visualizador de Poços | Versão 6.0</p>
+        <p>&copy; 2026 K2 Sistemas - Visualizador de Poços | Versão 7.0</p>
         <button id="toggleDebug" class="btn-link">Debug</button>
     </footer>
 
@@ -326,14 +338,7 @@
     </div>
 
     <script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/OverlappingMarkerSpiderfier/1.0.3/oms.min.js"></script>
     <script src="app.js"></script>
 </body>
-<!-- Overlay de carregamento inicial -->
-    <div id="appLoadingOverlay" class="app-loading-overlay">
-        <div class="app-loading-content">
-            <img src="logo-k2.png" alt="K2 Sistemas" style="height: 72px; margin-bottom: 1.5rem;">
-            <div class="loading-spinner"></div>
-            <p style="margin-top: 1rem; color: #6b7280; font-size: 0.875rem;">Carregando visualizador...</p>
-        </div>
-    </div>
 </html>

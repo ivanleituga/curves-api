@@ -1,8 +1,8 @@
-/* global google, markerClusterer */
+/* global google, markerClusterer, OverlappingMarkerSpiderfier */
 
 // ===============================================
 // K2 SISTEMAS - VISUALIZADOR DE POÇOS
-// Versão 6.0 - Sessões + Filtros por Bacia/Campo
+// Versão 7.0 - Comportamento unificado
 // ===============================================
 
 // CONFIGURAÇÃO E ESTADO GLOBAL
@@ -30,7 +30,8 @@ const state = {
   mapWellsCoordinates: [],
   mapInstance: null,
   mapMarkers: [],
-  mapClusterer: null,      // MarkerClusterer para muitos poços
+  mapClusterer: null,
+  mapSpiderfier: null,      // MarkerClusterer para muitos poços
   googleMapsLoaded: false,
   currentSessionId: null, // ID da sessão salva no banco
   
@@ -332,7 +333,6 @@ async function loadWells() {
     
   } catch (error) {
     log("Erro ao carregar poços DLIS", error);
-    showError("Erro ao carregar lista de poços");
   }
 }
 
@@ -1002,15 +1002,16 @@ function addWellToMap() {
 }
 
 function removeWellFromMap(wellId) {
-  // Remover marcador do mapa/clusterer
+  // Remover marcador do clusterer, spiderfier e mapa
   const markerIndex = state.mapMarkers.findIndex(m => m.wellId === wellId);
   if (markerIndex >= 0) {
     const marker = state.mapMarkers[markerIndex];
+    if (state.mapSpiderfier) {
+      state.mapSpiderfier.removeMarker(marker);
+    }
     if (state.mapClusterer) {
-      // Remove do clusterer (que gerencia a exibição)
       state.mapClusterer.removeMarker(marker);
     } else {
-      // Remove direto do mapa
       marker.setMap(null);
     }
     state.mapMarkers.splice(markerIndex, 1);
@@ -1031,6 +1032,10 @@ function clearMapSelection() {
   if (state.mapClusterer) {
     state.mapClusterer.clearMarkers();
     state.mapClusterer = null;
+  }
+  
+  if (state.mapSpiderfier) {
+    state.mapSpiderfier = null;
   }
   
   state.mapMarkers.forEach(marker => marker.setMap(null));
@@ -1067,66 +1072,50 @@ function updateMapWellsDisplay() {
     return;
   }
   
-  if (count <= 26) {
-    // Lista plana com nomes dos poços (para poucos poços)
-    mapElements.wellsList.innerHTML = state.mapWells.map((well) => `
-      <div class="map-well-item">
-        <span class="well-label">
-          <span class="well-marker-dot"></span>
-          <span>${well.id}</span>
-        </span>
-        <button class="btn-remove" onclick="removeWellFromMap('${well.id}')" title="Remover">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
+  // Sempre agrupa por Bacia - Campo
+  const groups = {};
+  state.mapWells.forEach(well => {
+    const bacia = well.bacia || "Sem Bacia";
+    const campo = well.campo || "Sem Campo";
+    const groupKey = `${bacia} - ${campo}`;
+    if (!groups[groupKey]) groups[groupKey] = [];
+    groups[groupKey].push(well);
+  });
+  
+  const sortedGroups = Object.keys(groups).sort();
+  
+  mapElements.wellsList.innerHTML = sortedGroups.map(groupName => {
+    const groupWells = groups[groupName];
+    const groupId = groupName.replace(/[^a-zA-Z0-9]/g, "_");
+    
+    return `
+      <div class="well-group">
+        <div class="well-group-header" onclick="toggleWellGroup('${groupId}')">
+          <svg class="well-group-arrow" id="arrow-${groupId}" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9 18 15 12 9 6"></polyline>
           </svg>
-        </button>
-      </div>
-    `).join("");
-  } else {
-    // Sidebar agrupada por campo (para muitos poços)
-    const groups = {};
-    state.mapWells.forEach(well => {
-      const campo = well.campo || "Sem Campo";
-      if (!groups[campo]) groups[campo] = [];
-      groups[campo].push(well);
-    });
-    
-    const sortedCampos = Object.keys(groups).sort();
-    
-    mapElements.wellsList.innerHTML = sortedCampos.map(campo => {
-      const campoWells = groups[campo];
-      // ID seguro para usar em atributos HTML (remove caracteres especiais)
-      const groupId = campo.replace(/[^a-zA-Z0-9]/g, "_");
-      
-      return `
-        <div class="well-group">
-          <div class="well-group-header" onclick="toggleWellGroup('${groupId}')">
-            <svg class="well-group-arrow" id="arrow-${groupId}" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="9 18 15 12 9 6"></polyline>
-            </svg>
-            <span class="well-group-name">${campo}</span>
-            <span class="well-group-count">${campoWells.length}</span>
-          </div>
-          <div class="well-group-items" id="group-${groupId}" style="display: none;">
-            ${campoWells.map(well => `
-              <div class="map-well-item">
-                <span class="well-label">
-                  <span>${well.id}</span>
-                </span>
-                <button class="btn-remove" onclick="removeWellFromMap('${well.id}')" title="Remover">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                  </svg>
-                </button>
-              </div>
-            `).join("")}
-          </div>
+          <span class="well-group-name">${groupName}</span>
+          <span class="well-group-count">${groupWells.length}</span>
         </div>
-      `;
-    }).join("");
-  }
+        <div class="well-group-items" id="group-${groupId}" style="display: none;">
+          ${groupWells.map(well => `
+            <div class="map-well-item">
+              <span class="well-label">
+                <span class="well-marker-dot"></span>
+                <span>${well.id}</span>
+              </span>
+              <button class="btn-remove" onclick="removeWellFromMap('${well.id}')" title="Remover">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }).join("");
 }
 
 /**
@@ -1307,18 +1296,33 @@ function displayMap(data) {
   
   state.mapInstance = map;
   
-  // Limpar marcadores e clusterer antigos
+  // Limpar marcadores, clusterer e spiderfier antigos
   state.mapMarkers.forEach(marker => marker.setMap(null));
   state.mapMarkers = [];
   if (state.mapClusterer) {
     state.mapClusterer.clearMarkers();
     state.mapClusterer = null;
   }
+  state.mapSpiderfier = null;
   
   const bounds = new google.maps.LatLngBounds();
   
-  // Com mais de 26 poços, usa MarkerClusterer para agrupar
-  const useCluster = wells.length > 26;
+  // Inicializar Spiderfier para separar marcadores sobrepostos
+  // Quando dois poços têm coordenadas iguais/próximas, o clique abre em leque
+  let oms = null;
+  if (window.OverlappingMarkerSpiderfier) {
+    oms = new OverlappingMarkerSpiderfier(map, {
+      markersWontMove: true,
+      markersWontHide: true,
+      basicFormatEvents: true,
+      keepSpiderfied: true
+    });
+    state.mapSpiderfier = oms;
+    log("Spiderfier inicializado");
+  }
+  
+  // InfoWindow compartilhado - só um aberto por vez
+  const sharedInfoWindow = new google.maps.InfoWindow();
   
   // Ícone padrão com labelOrigin posicionado abaixo do pin
   // Isso faz a etiqueta com nome do poço aparecer embaixo do marcador
@@ -1338,8 +1342,8 @@ function displayMap(data) {
     
     const markerOptions = {
       position: position,
-      // Se usar clusterer, NÃO adiciona ao mapa diretamente
-      map: useCluster ? null : map,
+      // Clusterer gerencia a exibição - não adiciona direto ao mapa
+      map: null,
       title: well.name,
       icon: pinIcon,
       // Nome do poço como label com classe CSS para fundo escuro
@@ -1352,40 +1356,60 @@ function displayMap(data) {
     const marker = new google.maps.Marker(markerOptions);
     marker.wellId = well.name;
     
-    // InfoWindow rico com bacia, campo, estado, coordenadas e botão "Ver Perfil"
-    const infoWindow = new google.maps.InfoWindow({
-      content: `
-        <div style="font-family: 'Inter', -apple-system, sans-serif; width: 240px;">
-          <div style="background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; padding: 14px; text-align: center;">
-            <div style="font-size: 0.9375rem; font-weight: 600;">${well.name}</div>
-          </div>
-          <div style="padding: 12px;">
-            <div style="display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 0.8125rem; color: #374151;">
-              ${bacia ? `<span style="color: #6b7280; font-weight: 500;">Bacia</span><span>${bacia}</span>` : ""}
-              ${campo ? `<span style="color: #6b7280; font-weight: 500;">Campo</span><span>${campo}</span>` : ""}
-              <span style="color: #6b7280; font-weight: 500;">Estado</span><span>${well.state || "N/A"}</span>
-              <span style="color: #6b7280; font-weight: 500;">Lat</span><span>${well.lat.toFixed(6)}</span>
-              <span style="color: #6b7280; font-weight: 500;">Lng</span><span>${well.lng.toFixed(6)}</span>
-            </div>
-            <button onclick="viewWellProfile('${well.name}')"
-              style="margin-top: 10px; width: 100%; padding: 7px; background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; border: none; border-radius: 4px; font-size: 0.8125rem; font-weight: 500; cursor: pointer; font-family: 'Inter', -apple-system, sans-serif;">
-              Ver Perfil
-            </button>
-          </div>
+    // Guardar conteúdo do InfoWindow no marcador para o spiderfier usar
+    marker.infoContent = `
+      <div style="font-family: 'Inter', -apple-system, sans-serif; width: 240px;">
+        <div style="background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; padding: 14px; text-align: center;">
+          <div style="font-size: 0.9375rem; font-weight: 600;">${well.name}</div>
         </div>
-      `
-    });
-        
-    marker.addListener("click", () => {
-      infoWindow.open(map, marker);
-    });
+        <div style="padding: 12px;">
+          <div style="display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 0.8125rem; color: #374151;">
+            ${bacia ? `<span style="color: #6b7280; font-weight: 500;">Bacia</span><span>${bacia}</span>` : ""}
+            ${campo ? `<span style="color: #6b7280; font-weight: 500;">Campo</span><span>${campo}</span>` : ""}
+            <span style="color: #6b7280; font-weight: 500;">Estado</span><span>${well.state || "N/A"}</span>
+            <span style="color: #6b7280; font-weight: 500;">Lat</span><span>${well.lat.toFixed(6)}</span>
+            <span style="color: #6b7280; font-weight: 500;">Lng</span><span>${well.lng.toFixed(6)}</span>
+          </div>
+          ${state.wells.find(w => w.id === well.name)
+    ? `<button onclick="viewWellProfile('${well.name}')"
+                style="margin-top: 10px; width: 100%; padding: 7px; background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; border: none; border-radius: 4px; font-size: 0.8125rem; font-weight: 500; cursor: pointer; font-family: 'Inter', -apple-system, sans-serif;">
+                Ver Perfil
+              </button>`
+    : `<button disabled
+                style="margin-top: 10px; width: 100%; padding: 7px; background: #d1d5db; color: #6b7280; border: none; border-radius: 4px; font-size: 0.8125rem; font-weight: 500; cursor: not-allowed; font-family: 'Inter', -apple-system, sans-serif;">
+                Sem dados DLIS
+              </button>`
+}
+        </div>
+      </div>
+    `;
+    
+    // Se spiderfier disponível, ele gerencia os cliques
+    // Senão, fallback com click listener direto
+    if (oms) {
+      oms.addMarker(marker);
+    } else {
+      marker.addListener("click", () => {
+        sharedInfoWindow.setContent(marker.infoContent);
+        sharedInfoWindow.open(map, marker);
+      });
+    }
     
     state.mapMarkers.push(marker);
     bounds.extend(position);
   });
   
-  // Criar MarkerClusterer se tiver muitos poços e a biblioteca estiver disponível
-  if (useCluster && window.markerClusterer) {
+  // Configurar evento de clique do spiderfier
+  // Abre o InfoWindow do marcador clicado (mesmo quando "spiderfied")
+  if (oms) {
+    oms.addListener("click", (marker) => {
+      sharedInfoWindow.setContent(marker.infoContent);
+      sharedInfoWindow.open(map, marker);
+    });
+  }
+  
+  // Sempre usar MarkerClusterer
+  if (window.markerClusterer) {
     state.mapClusterer = new markerClusterer.MarkerClusterer({
       map,
       markers: state.mapMarkers
@@ -1411,7 +1435,7 @@ function displayMap(data) {
   mapElements.downloadMapBtn.disabled = false;
   mapElements.mapTitle.textContent = `Mapa: ${wells.length} poço(s)`;
   
-  log("Mapa interativo exibido", { wellsCount: wells.length, clustered: useCluster });
+  log("Mapa interativo exibido", { wellsCount: wells.length });
 }
 
 /**
@@ -1707,7 +1731,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     setTimeout(() => appOverlay.remove(), 300);
   }
   
-  log("Aplicação inicializada");
+  log("Aplicação inicializada v7.0");
 });
 
 // EXPORTAR PARA DEBUGGING GLOBAL

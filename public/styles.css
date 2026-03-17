@@ -653,19 +653,6 @@ body {
     font-size: 0.8125rem;
 }
 
-.well-marker {
-    width: 22px;
-    height: 22px;
-    background: var(--danger);
-    color: white;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.6875rem;
-    font-weight: 600;
-}
-
 .map-well-item .btn-remove {
     background: none;
     border: none;
@@ -678,11 +665,6 @@ body {
 
 .map-well-item .btn-remove:hover {
     color: var(--danger);
-}
-
-.well-count {
-    font-weight: normal;
-    color: var(--gray-500);
 }
 
 /* ===============================================
@@ -1165,7 +1147,7 @@ body {
     left: 0;
     right: 0;
     bottom: 0;
-    background: white;
+    background: linear-gradient(160deg, #f8fafc 0%, #eff6ff 50%, #f8fafc 100%);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1180,4 +1162,53 @@ body {
 
 .app-loading-content {
     text-align: center;
+}
+
+.app-loading-logo {
+    height: 80px;
+    margin-bottom: 2rem;
+    animation: logoFadeIn 0.6s ease-out;
+}
+
+.app-loading-bar-track {
+    width: 200px;
+    height: 3px;
+    background: var(--gray-200);
+    border-radius: 3px;
+    margin: 0 auto 1.25rem;
+    overflow: hidden;
+}
+
+.app-loading-bar-fill {
+    width: 40%;
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary-blue), var(--primary-light));
+    border-radius: 3px;
+    animation: loadingSlide 1.4s ease-in-out infinite;
+}
+
+.app-loading-text {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 0.8125rem;
+    font-weight: 400;
+    color: var(--gray-500);
+    letter-spacing: 0.02em;
+}
+
+.app-loading-version {
+    margin-top: 0.5rem;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 0.6875rem;
+    color: #9ca3af;
+    letter-spacing: 0.03em;
+}
+
+@keyframes loadingSlide {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(350%); }
+}
+
+@keyframes logoFadeIn {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
 }
