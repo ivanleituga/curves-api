@@ -1700,6 +1700,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   
   await checkURLParams();
   
+  // Esconder overlay de carregamento com fade
+  const appOverlay = document.getElementById("appLoadingOverlay");
+  if (appOverlay) {
+    appOverlay.classList.add("fade-out");
+    setTimeout(() => appOverlay.remove(), 300);
+  }
+  
   log("Aplicação inicializada");
 });
 

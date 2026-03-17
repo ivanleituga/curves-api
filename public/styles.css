@@ -1154,3 +1154,30 @@ body {
     border-radius: 0.5rem !important;
     overflow: hidden !important;
 }
+
+/* ===============================================
+   OVERLAY DE CARREGAMENTO INICIAL
+   =============================================== */
+
+.app-loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    transition: opacity 0.3s ease;
+}
+
+.app-loading-overlay.fade-out {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.app-loading-content {
+    text-align: center;
+}
