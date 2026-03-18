@@ -1048,8 +1048,8 @@ function clearMapSelection() {
   
   mapElements.mapLinkPanel.classList.add("hidden");
   mapElements.downloadMapBtn.disabled = true;
+  mapElements.downloadMapBtn.title = "Baixar imagem do mapa";
   mapElements.mapTitle.textContent = "Mapa de Localização";
-  
   // Resetar filtros
   mapElements.baciaSelect.value = "";
   mapElements.campoSelect.innerHTML = "<option value=\"\">Todos os campos</option>";
@@ -1134,7 +1134,7 @@ function updateMapWellsDisplay() {
                     <div class="map-well-item well-item-deep">
                       <span class="well-label">
                         <span class="well-marker-dot"></span>
-                        <span>${well.id}</span>
+                        <span class="well-name-link" onclick="focusWellOnMap('${well.id}')">${well.id}</span>
                       </span>
                       <button class="btn-remove" onclick="removeWellFromMap('${well.id}')" title="Remover poço">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1177,6 +1177,25 @@ function toggleWellGroup(groupId) {
     items.style.display = "none";
     arrow.classList.remove("expanded");
   }
+}
+
+/**
+ * Centraliza o mapa no poço clicado e abre seu InfoWindow
+ */
+function focusWellOnMap(wellId) {
+  const marker = state.mapMarkers.find(m => m.wellId === wellId);
+  if (!marker || !state.mapInstance) return;
+  
+  const position = marker.getPosition();
+  
+  // Zoom suficiente para o cluster se desfazer e o pin aparecer
+  state.mapInstance.setZoom(18);
+  state.mapInstance.panTo(position);
+  
+  // Abrir InfoWindow após a animação do pan
+  setTimeout(() => {
+    google.maps.event.trigger(marker, "click");
+  }, 400);
 }
 
 /**
@@ -1461,10 +1480,16 @@ function displayMap(data) {
             <span style="color: #6b7280; font-weight: 500;">Lat</span><span>${well.lat.toFixed(6)}</span>
             <span style="color: #6b7280; font-weight: 500;">Lng</span><span>${well.lng.toFixed(6)}</span>
           </div>
-          <button onclick="viewWellProfile('${well.name}')"
-            style="margin-top: 10px; width: 100%; padding: 7px; background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; border: none; border-radius: 4px; font-size: 0.8125rem; font-weight: 500; cursor: pointer; font-family: 'Inter', -apple-system, sans-serif;">
-            Ver Perfil
-          </button>
+          ${state.wells.find(w => w.id === well.name)
+    ? `<button onclick="viewWellProfile('${well.name}')"
+                style="margin-top: 10px; width: 100%; padding: 7px; background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; border: none; border-radius: 4px; font-size: 0.8125rem; font-weight: 500; cursor: pointer; font-family: 'Inter', -apple-system, sans-serif;">
+                Ver Perfil
+              </button>`
+    : `<button disabled
+                style="margin-top: 10px; width: 100%; padding: 7px; background: #d1d5db; color: #6b7280; border: none; border-radius: 4px; font-size: 0.8125rem; font-weight: 500; cursor: not-allowed; font-family: 'Inter', -apple-system, sans-serif;">
+                Sem dados DLIS
+              </button>`
+}
         </div>
       </div>
     `;
@@ -1847,4 +1872,5 @@ window.removeWellFromMap = removeWellFromMap;
 window.removeBaciaFromMap = removeBaciaFromMap;
 window.removeCampoFromMap = removeCampoFromMap;
 window.toggleWellGroup = toggleWellGroup;
+window.focusWellOnMap = focusWellOnMap;
 window.viewWellProfile = viewWellProfile;

@@ -1156,6 +1156,16 @@ body {
     font-size: 0.75rem;
 }
 
+.well-name-link {
+    cursor: pointer;
+    transition: color 0.15s;
+}
+
+.well-name-link:hover {
+    color: var(--primary-light);
+    text-decoration: underline;
+}
+
 /* ===============================================
    LABELS DOS PINS NO MAPA (v7.0)
    Etiqueta com fundo escuro abaixo do marcador
