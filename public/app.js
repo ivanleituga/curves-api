@@ -1521,7 +1521,7 @@ function displayMap(data) {
   // Acima de 150 poços o download não é viável
   if (wells.length > 150) {
     mapElements.downloadMapBtn.disabled = true;
-    mapElements.downloadMapBtn.title = `Download indisponível para ${wells.length} poços (limite: 150). Use print screen ou clique com botão direito no mapa.`;
+    mapElements.downloadMapBtn.title = `Download indisponível para ${wells.length} poços (limite: 150).`;
   } else {
     mapElements.downloadMapBtn.disabled = false;
     mapElements.downloadMapBtn.title = "Baixar imagem do mapa";
