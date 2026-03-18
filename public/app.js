@@ -9,7 +9,6 @@
 const CONFIG = {
   API_URL: "/api",
   DEBUG_MODE: true
-  // Limite de 25 poços removido na v6.0
 };
 
 const state = {
@@ -31,7 +30,7 @@ const state = {
   mapInstance: null,
   mapMarkers: [],
   mapClusterer: null,
-  mapSpiderfier: null,      // MarkerClusterer para muitos poços
+  mapSpiderfier: null,       // Spiderfier para marcadores sobrepostos
   googleMapsLoaded: false,
   currentSessionId: null, // ID da sessão salva no banco
   
@@ -1049,7 +1048,6 @@ function clearMapSelection() {
   
   mapElements.mapLinkPanel.classList.add("hidden");
   mapElements.downloadMapBtn.disabled = true;
-  mapElements.downloadMapBtn.title = "Baixar imagem do mapa";
   mapElements.mapTitle.textContent = "Mapa de Localização";
   
   // Resetar filtros
@@ -1060,6 +1058,11 @@ function clearMapSelection() {
   
   log("Seleção de mapa limpa");
 }
+
+// ===============================================
+// MAPA - SIDEBAR HIERÁRQUICA (Bacia → Campo → Poços)
+// Três níveis com remoção independente em cada nível
+// ===============================================
 
 function updateMapWellsDisplay() {
   const count = state.mapWells.length;
@@ -1073,46 +1076,78 @@ function updateMapWellsDisplay() {
     return;
   }
   
-  // Sempre agrupa por Bacia - Campo
-  const groups = {};
+  // Estrutura de 3 níveis: Bacia → Campo → Poços
+  const hierarchy = {};
   state.mapWells.forEach(well => {
     const bacia = well.bacia || "Sem Bacia";
     const campo = well.campo || "Sem Campo";
-    const groupKey = `${bacia} - ${campo}`;
-    if (!groups[groupKey]) groups[groupKey] = [];
-    groups[groupKey].push(well);
+    if (!hierarchy[bacia]) hierarchy[bacia] = {};
+    if (!hierarchy[bacia][campo]) hierarchy[bacia][campo] = [];
+    hierarchy[bacia][campo].push(well);
   });
   
-  const sortedGroups = Object.keys(groups).sort();
+  const sortedBacias = Object.keys(hierarchy).sort();
   
-  mapElements.wellsList.innerHTML = sortedGroups.map(groupName => {
-    const groupWells = groups[groupName];
-    const groupId = groupName.replace(/[^a-zA-Z0-9]/g, "_");
+  mapElements.wellsList.innerHTML = sortedBacias.map(bacia => {
+    const campos = hierarchy[bacia];
+    const baciaId = sanitizeId(bacia);
+    const baciaWellCount = Object.values(campos).reduce((sum, wells) => sum + wells.length, 0);
+    const sortedCampos = Object.keys(campos).sort();
     
     return `
       <div class="well-group">
-        <div class="well-group-header" onclick="toggleWellGroup('${groupId}')">
-          <svg class="well-group-arrow" id="arrow-${groupId}" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <div class="well-group-header" onclick="toggleWellGroup('bacia-${baciaId}')">
+          <svg class="well-group-arrow" id="arrow-bacia-${baciaId}" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="9 18 15 12 9 6"></polyline>
           </svg>
-          <span class="well-group-name">${groupName}</span>
-          <span class="well-group-count">${groupWells.length}</span>
+          <span class="well-group-name">${bacia}</span>
+          <span class="well-group-count">${baciaWellCount}</span>
+          <button class="btn-remove-group" onclick="event.stopPropagation(); removeBaciaFromMap('${bacia.replace(/'/g, "\\'")}')" title="Remover bacia">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
         </div>
-        <div class="well-group-items" id="group-${groupId}" style="display: none;">
-          ${groupWells.map(well => `
-            <div class="map-well-item">
-              <span class="well-label">
-                <span class="well-marker-dot"></span>
-                <span>${well.id}</span>
-              </span>
-              <button class="btn-remove" onclick="removeWellFromMap('${well.id}')" title="Remover">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
-            </div>
-          `).join("")}
+        <div class="well-group-items" id="group-bacia-${baciaId}" style="display: none;">
+          ${sortedCampos.map(campo => {
+    const campoId = sanitizeId(`${bacia}_${campo}`);
+    const campoWells = campos[campo];
+            
+    return `
+              <div class="well-subgroup">
+                <div class="well-subgroup-header" onclick="toggleWellGroup('campo-${campoId}')">
+                  <svg class="well-group-arrow" id="arrow-campo-${campoId}" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                  </svg>
+                  <span class="well-subgroup-name">${campo}</span>
+                  <span class="well-subgroup-count">${campoWells.length}</span>
+                  <button class="btn-remove-group" onclick="event.stopPropagation(); removeCampoFromMap('${bacia.replace(/'/g, "\\'")}', '${campo.replace(/'/g, "\\'")}')" title="Remover campo">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                  </button>
+                </div>
+                <div class="well-subgroup-items" id="group-campo-${campoId}" style="display: none;">
+                  ${campoWells.map(well => `
+                    <div class="map-well-item well-item-deep">
+                      <span class="well-label">
+                        <span class="well-marker-dot"></span>
+                        <span>${well.id}</span>
+                      </span>
+                      <button class="btn-remove" onclick="removeWellFromMap('${well.id}')" title="Remover poço">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <line x1="18" y1="6" x2="6" y2="18"></line>
+                          <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                      </button>
+                    </div>
+                  `).join("")}
+                </div>
+              </div>
+            `;
+  }).join("")}
         </div>
       </div>
     `;
@@ -1120,7 +1155,14 @@ function updateMapWellsDisplay() {
 }
 
 /**
- * Expande/recolhe um grupo de poços na sidebar
+ * Gera um ID seguro para uso em atributos HTML
+ */
+function sanitizeId(str) {
+  return str.replace(/[^a-zA-Z0-9]/g, "_");
+}
+
+/**
+ * Expande/recolhe um grupo na sidebar (funciona para bacias e campos)
  */
 function toggleWellGroup(groupId) {
   const items = document.getElementById(`group-${groupId}`);
@@ -1135,6 +1177,54 @@ function toggleWellGroup(groupId) {
     items.style.display = "none";
     arrow.classList.remove("expanded");
   }
+}
+
+/**
+ * Remove todos os poços de uma bacia
+ */
+function removeBaciaFromMap(bacia) {
+  const toRemove = state.mapWells.filter(w => (w.bacia || "Sem Bacia") === bacia);
+  
+  toRemove.forEach(well => {
+    const markerIndex = state.mapMarkers.findIndex(m => m.wellId === well.id);
+    if (markerIndex >= 0) {
+      const marker = state.mapMarkers[markerIndex];
+      if (state.mapSpiderfier) state.mapSpiderfier.removeMarker(marker);
+      if (state.mapClusterer) state.mapClusterer.removeMarker(marker);
+      else marker.setMap(null);
+      state.mapMarkers.splice(markerIndex, 1);
+    }
+  });
+  
+  state.mapWells = state.mapWells.filter(w => (w.bacia || "Sem Bacia") !== bacia);
+  updateMapWellsDisplay();
+  log(`Bacia removida: ${bacia}`, { removidos: toRemove.length, restantes: state.mapWells.length });
+}
+
+/**
+ * Remove todos os poços de um campo dentro de uma bacia
+ */
+function removeCampoFromMap(bacia, campo) {
+  const toRemove = state.mapWells.filter(w => 
+    (w.bacia || "Sem Bacia") === bacia && (w.campo || "Sem Campo") === campo
+  );
+  
+  toRemove.forEach(well => {
+    const markerIndex = state.mapMarkers.findIndex(m => m.wellId === well.id);
+    if (markerIndex >= 0) {
+      const marker = state.mapMarkers[markerIndex];
+      if (state.mapSpiderfier) state.mapSpiderfier.removeMarker(marker);
+      if (state.mapClusterer) state.mapClusterer.removeMarker(marker);
+      else marker.setMap(null);
+      state.mapMarkers.splice(markerIndex, 1);
+    }
+  });
+  
+  state.mapWells = state.mapWells.filter(w => 
+    !((w.bacia || "Sem Bacia") === bacia && (w.campo || "Sem Campo") === campo)
+  );
+  updateMapWellsDisplay();
+  log(`Campo removido: ${campo} (${bacia})`, { removidos: toRemove.length, restantes: state.mapWells.length });
 }
 
 // ===============================================
@@ -1371,16 +1461,10 @@ function displayMap(data) {
             <span style="color: #6b7280; font-weight: 500;">Lat</span><span>${well.lat.toFixed(6)}</span>
             <span style="color: #6b7280; font-weight: 500;">Lng</span><span>${well.lng.toFixed(6)}</span>
           </div>
-          ${state.wells.find(w => w.id === well.name)
-    ? `<button onclick="viewWellProfile('${well.name}')"
-                style="margin-top: 10px; width: 100%; padding: 7px; background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; border: none; border-radius: 4px; font-size: 0.8125rem; font-weight: 500; cursor: pointer; font-family: 'Inter', -apple-system, sans-serif;">
-                Ver Perfil
-              </button>`
-    : `<button disabled
-                style="margin-top: 10px; width: 100%; padding: 7px; background: #d1d5db; color: #6b7280; border: none; border-radius: 4px; font-size: 0.8125rem; font-weight: 500; cursor: not-allowed; font-family: 'Inter', -apple-system, sans-serif;">
-                Sem dados DLIS
-              </button>`
-}
+          <button onclick="viewWellProfile('${well.name}')"
+            style="margin-top: 10px; width: 100%; padding: 7px; background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; border: none; border-radius: 4px; font-size: 0.8125rem; font-weight: 500; cursor: pointer; font-family: 'Inter', -apple-system, sans-serif;">
+            Ver Perfil
+          </button>
         </div>
       </div>
     `;
@@ -1437,11 +1521,13 @@ function displayMap(data) {
   // Acima de 150 poços o download não é viável
   if (wells.length > 150) {
     mapElements.downloadMapBtn.disabled = true;
-    mapElements.downloadMapBtn.title = `Download indisponível para ${wells.length} poços (limite: 150).`;
+    mapElements.downloadMapBtn.title = `Download indisponível para ${wells.length} poços (limite: 150). Use print screen ou clique com botão direito no mapa.`;
   } else {
     mapElements.downloadMapBtn.disabled = false;
     mapElements.downloadMapBtn.title = "Baixar imagem do mapa";
-  }  mapElements.mapTitle.textContent = `Mapa: ${wells.length} poço(s)`;
+  }
+  
+  mapElements.mapTitle.textContent = `Mapa: ${wells.length} poço(s)`;
   
   log("Mapa interativo exibido", { wellsCount: wells.length });
 }
@@ -1703,7 +1789,7 @@ async function copyMapLink() {
 // ===============================================
 
 document.addEventListener("DOMContentLoaded", async () => {
-  log("Iniciando aplicação v6.0");
+  log("Iniciando aplicação v7.0");
   
   loadToken();
   
@@ -1758,5 +1844,7 @@ window.CurvesAPI = {
 };
 
 window.removeWellFromMap = removeWellFromMap;
+window.removeBaciaFromMap = removeBaciaFromMap;
+window.removeCampoFromMap = removeCampoFromMap;
 window.toggleWellGroup = toggleWellGroup;
 window.viewWellProfile = viewWellProfile;

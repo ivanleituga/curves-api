@@ -25,7 +25,7 @@ const pool = new Pool({
 
 // Middlewares
 app.use(cors());
-app.use(express.json({ limit: "5mb" }));
+app.use(express.json());
 app.use(express.static("public"));
 app.set("trust proxy", true);
 
@@ -376,7 +376,6 @@ app.get("/api/maps-config", (req, res) => {
 
 // ===============================================
 // 6. BUSCAR COORDENADAS DE POÇOS (PostgreSQL - para mapa)
-//    Limite de 25 removido para suportar bacias inteiras
 // ===============================================
 app.post("/api/wells-coordinates", async (req, res) => {
   try {
@@ -607,7 +606,7 @@ app.get("/api/health", async (req, res) => {
     res.json({ 
       status: allHealthy ? "ok" : "degraded",
       timestamp: new Date(),
-      version: "6.0",
+      version: "7.0",
       services: {
         k2API: {
           url: API_BASE_URL,
@@ -637,11 +636,36 @@ app.get("/api/health", async (req, res) => {
 });
 
 // ===============================================
+// LIMPEZA AUTOMÁTICA DE SESSÕES ANTIGAS
+// Remove sessões com mais de 30 dias a cada 24 horas
+// ===============================================
+
+const SESSION_MAX_AGE_DAYS = 30;
+const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 horas
+
+async function cleanupOldSessions() {
+  try {
+    const result = await pool.query(
+      `DELETE FROM map_sessions WHERE created_at < NOW() - INTERVAL '${SESSION_MAX_AGE_DAYS} days' RETURNING id`
+    );
+    
+    const count = result.rowCount;
+    if (count > 0) {
+      console.log(`🧹 Limpeza: ${count} sessão(ões) com mais de ${SESSION_MAX_AGE_DAYS} dias removida(s)`);
+    } else {
+      console.log("🧹 Limpeza: nenhuma sessão antiga encontrada");
+    }
+  } catch (error) {
+    console.error("❌ Erro na limpeza de sessões:", error.message);
+  }
+}
+
+// ===============================================
 // INICIAR SERVIDOR
 // ===============================================
 app.listen(PORT, () => {
   console.log(`
-    🚀 Curves API Server v6.0
+    🚀 Curves API Server v7.0
     ==========================================
     Servidor: http://localhost:${PORT}
     
@@ -661,6 +685,12 @@ app.listen(PORT, () => {
     - POST /api/map-sessions       → Criar sessão (salvar seleção)
     - GET  /api/map-sessions/:id   → Buscar sessão (recuperar seleção)
     - GET  /api/health             → Status dos serviços
+    
+    🧹 Limpeza de sessões: a cada 24h (retenção: ${SESSION_MAX_AGE_DAYS} dias)
     ==========================================
   `);
+  
+  // Rodar limpeza no startup e agendar a cada 24 horas
+  cleanupOldSessions();
+  setInterval(cleanupOldSessions, CLEANUP_INTERVAL_MS);
 });

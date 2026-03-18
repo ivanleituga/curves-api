@@ -908,7 +908,7 @@ body {
 }
 
 /* ===============================================
-   FILTROS POR BACIA/CAMPO (v6.0 - Estilizado)
+   FILTROS POR BACIA/CAMPO (v7.0 - Estilizado)
    =============================================== */
 
 .filter-section {
@@ -1031,7 +1031,7 @@ body {
 }
 
 /* ===============================================
-   SIDEBAR AGRUPADA POR CAMPO (v6.1)
+   SIDEBAR HIERÁRQUICA - BACIA/CAMPO/POÇO (v7.0)
    =============================================== */
 
 .well-group {
@@ -1087,13 +1087,72 @@ body {
     flex-shrink: 0;
 }
 
-.well-group-items {
+/* Botão X nos headers de bacia e campo */
+.btn-remove-group {
+    background: none;
+    border: none;
+    color: var(--gray-400);
+    cursor: pointer;
+    padding: 0.125rem;
+    border-radius: 0.25rem;
+    transition: all 0.15s;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+}
+
+.btn-remove-group:hover {
+    color: var(--danger);
+}
+
+/* Nível 2: Subgrupo (Campo) */
+.well-subgroup {
+    border-top: 1px solid var(--gray-200);
+}
+
+.well-subgroup-header {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.75rem 0.375rem 1.5rem;
+    background: white;
+    cursor: pointer;
+    transition: background 0.15s;
+    user-select: none;
+}
+
+.well-subgroup-header:hover {
+    background: var(--gray-50);
+}
+
+.well-subgroup-name {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--gray-700);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.well-subgroup-count {
+    font-size: 0.625rem;
+    font-weight: 600;
+    color: var(--primary-light);
+    background: #eff6ff;
+    border-radius: 9999px;
+    padding: 0.0625rem 0.375rem;
+    flex-shrink: 0;
+}
+
+.well-subgroup-items {
     max-height: 200px;
     overflow-y: auto;
 }
 
-.well-group-items .map-well-item {
-    padding-left: 1.75rem;
+/* Nível 3: Poço individual (profundo) */
+.well-item-deep {
+    padding-left: 2.25rem;
     font-size: 0.75rem;
 }
 
