@@ -1049,6 +1049,7 @@ function clearMapSelection() {
   
   mapElements.mapLinkPanel.classList.add("hidden");
   mapElements.downloadMapBtn.disabled = true;
+  mapElements.downloadMapBtn.title = "Baixar imagem do mapa";
   mapElements.mapTitle.textContent = "Mapa de Localização";
   
   // Resetar filtros
@@ -1432,8 +1433,15 @@ function displayMap(data) {
   
   state.mapWellsCoordinates = wells;
   
-  mapElements.downloadMapBtn.disabled = false;
-  mapElements.mapTitle.textContent = `Mapa: ${wells.length} poço(s)`;
+  // Static Maps API tem limite de ~8192 chars na URL
+  // Acima de 150 poços o download não é viável
+  if (wells.length > 150) {
+    mapElements.downloadMapBtn.disabled = true;
+    mapElements.downloadMapBtn.title = `Download indisponível para ${wells.length} poços (limite: 150).`;
+  } else {
+    mapElements.downloadMapBtn.disabled = false;
+    mapElements.downloadMapBtn.title = "Baixar imagem do mapa";
+  }  mapElements.mapTitle.textContent = `Mapa: ${wells.length} poço(s)`;
   
   log("Mapa interativo exibido", { wellsCount: wells.length });
 }
