@@ -587,8 +587,16 @@ app.get("/api/health", async (req, res) => {
     let k2Status = "offline";
     try {
       const response = await fetch(`${API_BASE_URL}/wells`, { headers });
-      k2Status = response.ok ? "online" : "offline";
+      if (response.ok) {
+        k2Status = "online";
+      } else if (response.status === 401) {
+        // API acessível mas requer autenticação - não é offline
+        k2Status = "online (auth required)";
+      } else {
+        k2Status = "offline";
+      }
     } catch {
+      // Erro de conexão (timeout, DNS, etc) - realmente offline
       k2Status = "offline";
     }
     
@@ -601,7 +609,7 @@ app.get("/api/health", async (req, res) => {
       dbStatus = "offline";
     }
     
-    const allHealthy = k2Status === "online" && dbStatus === "online";
+    const allHealthy = (k2Status === "online" || k2Status === "online (auth required)") && dbStatus === "online";
     
     res.json({ 
       status: allHealthy ? "ok" : "degraded",
