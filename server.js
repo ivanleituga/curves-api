@@ -13,6 +13,9 @@ const API_BASE_URL = process.env.API_BASE_URL || "http://swk2adm1-001.k2sistemas
 // Google Maps API Key
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || "";
 
+// ArcGIS API Key
+const ARCGIS_API_KEY = process.env.ARCGIS_API_KEY || "";
+
 // Configuração do PostgreSQL
 const pool = new Pool({
   host: process.env.DB_HOST,
@@ -375,6 +378,15 @@ app.get("/api/maps-config", (req, res) => {
 });
 
 // ===============================================
+// 5b. CONFIG DO ARCGIS
+// ===============================================
+app.get("/api/arcgis-config", (req, res) => {
+  res.json({
+    apiKey: ARCGIS_API_KEY || ""
+  });
+});
+
+// ===============================================
 // 6. BUSCAR COORDENADAS DE POÇOS (PostgreSQL - para mapa)
 // ===============================================
 app.post("/api/wells-coordinates", async (req, res) => {
@@ -587,16 +599,8 @@ app.get("/api/health", async (req, res) => {
     let k2Status = "offline";
     try {
       const response = await fetch(`${API_BASE_URL}/wells`, { headers });
-      if (response.ok) {
-        k2Status = "online";
-      } else if (response.status === 401) {
-        // API acessível mas requer autenticação - não é offline
-        k2Status = "online (auth required)";
-      } else {
-        k2Status = "offline";
-      }
+      k2Status = response.ok ? "online" : "offline";
     } catch {
-      // Erro de conexão (timeout, DNS, etc) - realmente offline
       k2Status = "offline";
     }
     
@@ -609,7 +613,7 @@ app.get("/api/health", async (req, res) => {
       dbStatus = "offline";
     }
     
-    const allHealthy = (k2Status === "online" || k2Status === "online (auth required)") && dbStatus === "online";
+    const allHealthy = k2Status === "online" && dbStatus === "online";
     
     res.json({ 
       status: allHealthy ? "ok" : "degraded",
@@ -681,6 +685,7 @@ app.listen(PORT, () => {
     - API K2 (Perfis): ${API_BASE_URL}
     - PostgreSQL (Mapas): ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}
     - Google Maps: ${GOOGLE_MAPS_API_KEY ? "✅ Configurado" : "⚠️  Não configurado"}
+    - ArcGIS: ${ARCGIS_API_KEY ? "✅ Configurado" : "⚠️  Não configurado"}
     
     📍 Endpoints:
     - GET  /api/wells              → Poços com DLIS (API K2)
@@ -688,6 +693,7 @@ app.listen(PORT, () => {
     - GET  /api/wells/:id/curves   → Curvas de um poço
     - POST /api/generate-profile   → Gerar perfil composto
     - GET  /api/maps-config        → Configuração Google Maps
+    - GET  /api/arcgis-config      → Configuração ArcGIS
     - POST /api/wells-coordinates  → Coordenadas para mapa
     - POST /api/static-map         → URL do mapa estático
     - POST /api/map-sessions       → Criar sessão (salvar seleção)

@@ -37,6 +37,11 @@ const state = {
   // ===== NAVEGAÇÃO =====
   currentTab: "viewer",
   
+  // ===== ARCGIS =====
+  arcgisMapView: null,
+  arcgisLayer: null,
+  arcgisLoaded: false,
+  
   // ===== AUTENTICAÇÃO =====
   accessToken: null
 };
@@ -100,7 +105,25 @@ const mapElements = {
 const tabElements = {
   tabButtons: document.querySelectorAll(".tab-btn"),
   viewerContent: document.getElementById("viewer-content"),
-  mapsContent: document.getElementById("maps-content")
+  mapsContent: document.getElementById("maps-content"),
+  arcgisContent: document.getElementById("arcgis-content")
+};
+
+// ELEMENTOS DO DOM - ARCGIS
+const arcgisElements = {
+  generateBtn: document.getElementById("generateArcGISBtn"),
+  btnText: document.getElementById("arcgisBtnText"),
+  btnLoader: document.getElementById("arcgisBtnLoader"),
+  clearBtn: document.getElementById("clearArcGISBtn"),
+  mapContainer: document.getElementById("arcgisMapContainer"),
+  mapDiv: document.getElementById("arcgisMap"),
+  placeholder: document.getElementById("arcgisPlaceholder"),
+  title: document.getElementById("arcgisTitle"),
+  wellInfo: document.getElementById("arcgisWellInfo"),
+  wellCount: document.getElementById("arcgisWellCount"),
+  apiStatus: document.getElementById("arcgisApiStatus"),
+  errorContainer: document.getElementById("arcgisErrorContainer"),
+  errorText: document.getElementById("arcgisErrorText")
 };
 
 // ===============================================
@@ -179,6 +202,7 @@ function getTokenHashPart() {
 
 function getTabFromHash() {
   const hash = window.location.hash;
+  if (hash.includes("arcgis")) return "arcgis";
   if (hash.includes("maps")) return "maps";
   if (hash.includes("viewer")) return "viewer";
   return null;
@@ -193,12 +217,18 @@ function switchTab(tabName) {
     btn.classList.toggle("active", btn.dataset.tab === tabName);
   });
   
+  // Desativar todas as abas e ativar a selecionada
+  tabElements.viewerContent.classList.remove("active");
+  tabElements.mapsContent.classList.remove("active");
+  tabElements.arcgisContent.classList.remove("active");
+  
   if (tabName === "viewer") {
     tabElements.viewerContent.classList.add("active");
-    tabElements.mapsContent.classList.remove("active");
   } else if (tabName === "maps") {
-    tabElements.viewerContent.classList.remove("active");
     tabElements.mapsContent.classList.add("active");
+  } else if (tabName === "arcgis") {
+    tabElements.arcgisContent.classList.add("active");
+    updateArcGISWellInfo();
   }
   
   const currentSearch = window.location.search;
@@ -1048,8 +1078,8 @@ function clearMapSelection() {
   
   mapElements.mapLinkPanel.classList.add("hidden");
   mapElements.downloadMapBtn.disabled = true;
-  mapElements.downloadMapBtn.title = "Baixar imagem do mapa";
   mapElements.mapTitle.textContent = "Mapa de Localização";
+  
   // Resetar filtros
   mapElements.baciaSelect.value = "";
   mapElements.campoSelect.innerHTML = "<option value=\"\">Todos os campos</option>";
@@ -1134,7 +1164,7 @@ function updateMapWellsDisplay() {
                     <div class="map-well-item well-item-deep">
                       <span class="well-label">
                         <span class="well-marker-dot"></span>
-                        <span class="well-name-link" onclick="focusWellOnMap('${well.id}')">${well.id}</span>
+                        <span>${well.id}</span>
                       </span>
                       <button class="btn-remove" onclick="removeWellFromMap('${well.id}')" title="Remover poço">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1177,25 +1207,6 @@ function toggleWellGroup(groupId) {
     items.style.display = "none";
     arrow.classList.remove("expanded");
   }
-}
-
-/**
- * Centraliza o mapa no poço clicado e abre seu InfoWindow
- */
-function focusWellOnMap(wellId) {
-  const marker = state.mapMarkers.find(m => m.wellId === wellId);
-  if (!marker || !state.mapInstance) return;
-  
-  const position = marker.getPosition();
-  
-  // Zoom suficiente para o cluster se desfazer e o pin aparecer
-  state.mapInstance.setZoom(18);
-  state.mapInstance.panTo(position);
-  
-  // Abrir InfoWindow após a animação do pan
-  setTimeout(() => {
-    google.maps.event.trigger(marker, "click");
-  }, 400);
 }
 
 /**
@@ -1480,16 +1491,10 @@ function displayMap(data) {
             <span style="color: #6b7280; font-weight: 500;">Lat</span><span>${well.lat.toFixed(6)}</span>
             <span style="color: #6b7280; font-weight: 500;">Lng</span><span>${well.lng.toFixed(6)}</span>
           </div>
-          ${state.wells.find(w => w.id === well.name)
-    ? `<button onclick="viewWellProfile('${well.name}')"
-                style="margin-top: 10px; width: 100%; padding: 7px; background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; border: none; border-radius: 4px; font-size: 0.8125rem; font-weight: 500; cursor: pointer; font-family: 'Inter', -apple-system, sans-serif;">
-                Ver Perfil
-              </button>`
-    : `<button disabled
-                style="margin-top: 10px; width: 100%; padding: 7px; background: #d1d5db; color: #6b7280; border: none; border-radius: 4px; font-size: 0.8125rem; font-weight: 500; cursor: not-allowed; font-family: 'Inter', -apple-system, sans-serif;">
-                Sem dados DLIS
-              </button>`
-}
+          <button onclick="viewWellProfile('${well.name}')"
+            style="margin-top: 10px; width: 100%; padding: 7px; background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; border: none; border-radius: 4px; font-size: 0.8125rem; font-weight: 500; cursor: pointer; font-family: 'Inter', -apple-system, sans-serif;">
+            Ver Perfil
+          </button>
         </div>
       </div>
     `;
@@ -1546,7 +1551,7 @@ function displayMap(data) {
   // Acima de 150 poços o download não é viável
   if (wells.length > 150) {
     mapElements.downloadMapBtn.disabled = true;
-    mapElements.downloadMapBtn.title = `Download indisponível para ${wells.length} poços (limite: 150).`;
+    mapElements.downloadMapBtn.title = `Download indisponível para ${wells.length} poços (limite: 150). Use print screen ou clique com botão direito no mapa.`;
   } else {
     mapElements.downloadMapBtn.disabled = false;
     mapElements.downloadMapBtn.title = "Baixar imagem do mapa";
@@ -1810,6 +1815,326 @@ async function copyMapLink() {
 }
 
 // ===============================================
+// ARCGIS - FUNÇÕES
+// ===============================================
+
+function showArcGISError(message) {
+  arcgisElements.errorContainer.classList.remove("hidden");
+  arcgisElements.errorText.textContent = message;
+  log("ERRO ARCGIS", message);
+}
+
+function clearArcGISError() {
+  arcgisElements.errorContainer.classList.add("hidden");
+  arcgisElements.errorText.textContent = "";
+}
+
+/**
+ * Atualiza o painel lateral do ArcGIS com info dos poços selecionados
+ * Chamado ao trocar para a aba ArcGIS
+ */
+function updateArcGISWellInfo() {
+  const count = state.mapWells.length;
+  
+  arcgisElements.wellCount.textContent = count;
+  arcgisElements.generateBtn.disabled = count === 0;
+  
+  if (count === 0) {
+    arcgisElements.wellInfo.innerHTML = "<p class=\"placeholder-text\">Selecione poços na aba \"Mapa de Poços\" e volte aqui para visualizar no ArcGIS.</p>";
+  } else {
+    // Resumo por bacia
+    const bacias = {};
+    state.mapWells.forEach(w => {
+      const bacia = w.bacia || "Sem Bacia";
+      if (!bacias[bacia]) bacias[bacia] = 0;
+      bacias[bacia]++;
+    });
+    
+    const resumo = Object.entries(bacias).sort((a, b) => a[0].localeCompare(b[0])).map(([bacia, qty]) =>
+      `<div class="status-item"><span class="status-label">${bacia}</span><span class="status-value">${qty}</span></div>`
+    ).join("");
+    
+    arcgisElements.wellInfo.innerHTML = `
+      <div style="font-size: 0.8125rem; font-weight: 600; color: var(--gray-700); margin-bottom: 0.5rem;">${count} poço(s) selecionado(s)</div>
+      ${resumo}
+    `;
+  }
+}
+
+/**
+ * Gera o mapa ArcGIS com os poços selecionados
+ * Usa require() do ArcGIS JS API para carregar módulos
+ */
+async function generateArcGISMap() {
+  if (state.mapWells.length === 0) {
+    showArcGISError("Selecione poços na aba \"Mapa de Poços\" primeiro");
+    return;
+  }
+  
+  clearArcGISError();
+  
+  // Mostrar loading
+  arcgisElements.generateBtn.disabled = true;
+  arcgisElements.btnText.classList.add("hidden");
+  arcgisElements.btnLoader.classList.remove("hidden");
+  
+  try {
+    // Buscar API key do servidor
+    const configResponse = await fetch(`${CONFIG.API_URL}/arcgis-config`);
+    const config = await configResponse.json();
+    
+    if (!config.apiKey) {
+      throw new Error("ArcGIS API Key não configurada no servidor");
+    }
+    
+    log("ArcGIS API Key obtida, carregando mapa...");
+    
+    // Buscar coordenadas dos poços selecionados
+    const wellNames = state.mapWells.map(w => w.id);
+    const response = await fetch(`${CONFIG.API_URL}/wells-coordinates`, {
+      method: "POST",
+      headers: getFetchHeaders(),
+      body: JSON.stringify({ wellNames })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP ${response.status}`);
+    }
+    
+    const data = await response.json();
+    log("Coordenadas recebidas para ArcGIS", { count: data.count });
+    
+    // Mostrar container e criar div novo para o mapa
+    // (ArcGIS MapView não renderiza corretamente em divs reutilizados)
+    arcgisElements.placeholder.style.display = "none";
+    arcgisElements.mapContainer.style.cssText = "flex:1; position:relative; min-height:500px; border-radius:0.5rem; overflow:hidden;";
+    
+    // Remover div de mapa anterior se existir
+    const oldMap = arcgisElements.mapContainer.querySelector(".arcgis-map-instance");
+    if (oldMap) oldMap.remove();
+    
+    // Criar div novo
+    const freshMapDiv = document.createElement("div");
+    freshMapDiv.className = "arcgis-map-instance";
+    freshMapDiv.style.cssText = "position:absolute; top:0; left:0; right:0; bottom:0; z-index:5;";
+    arcgisElements.mapContainer.appendChild(freshMapDiv);
+        
+    // Aguardar reflow do DOM antes de criar o MapView
+    setTimeout(() => {
+      window.require([
+        "esri/config",
+        "esri/Map",
+        "esri/views/MapView",
+        "esri/Graphic",
+        "esri/layers/GraphicsLayer",
+        "esri/layers/FeatureLayer",
+        "esri/geometry/Point",
+        "esri/symbols/SimpleMarkerSymbol",
+        "esri/PopupTemplate"
+      ], function(esriConfig, Map, MapView, Graphic, GraphicsLayer, FeatureLayer, Point, SimpleMarkerSymbol, PopupTemplate) {
+        
+        // Configurar API Key
+        esriConfig.apiKey = config.apiKey;
+        
+        // Preparar dados dos poços com info completa
+        const wells = data.wells.map(w => {
+          const fullWell = state.mapWells.find(mw => mw.id === w.name);
+          return {
+            name: w.name,
+            lat: w.lat,
+            lng: w.lng,
+            state: w.state || "N/A",
+            bacia: fullWell ? fullWell.bacia : "",
+            campo: fullWell ? fullWell.campo : ""
+          };
+        });
+        
+        // Calcular centro
+        const avgLat = wells.reduce((sum, w) => sum + w.lat, 0) / wells.length;
+        const avgLng = wells.reduce((sum, w) => sum + w.lng, 0) / wells.length;
+        
+        // Destruir mapa anterior se existir
+        if (state.arcgisMapView) {
+          state.arcgisMapView.destroy();
+          state.arcgisMapView = null;
+        }
+      
+        // Criar mapa
+        const map = new Map({
+          basemap: "arcgis/topographic"
+        });
+      
+        // Criar view
+        const view = new MapView({
+          container: freshMapDiv,
+          map: map,
+          center: [avgLng, avgLat],
+          zoom: 6
+        });
+      
+        state.arcgisMapView = view;
+      
+        // Criar graphics dos poços como source para FeatureLayer
+        const graphics = wells.map((well, i) => ({
+          geometry: {
+            type: "point",
+            longitude: well.lng,
+            latitude: well.lat
+          },
+          attributes: {
+            ObjectID: i,
+            name: well.name,
+            bacia: well.bacia,
+            campo: well.campo,
+            estado: well.state,
+            lat: well.lat,
+            lng: well.lng
+          }
+        }));
+      
+        // Popup template para clique nos poços
+        const popupTemplate = new PopupTemplate({
+          title: "{name}",
+          content: [
+            {
+              type: "fields",
+              fieldInfos: [
+                { fieldName: "bacia", label: "Bacia" },
+                { fieldName: "campo", label: "Campo" },
+                { fieldName: "estado", label: "Estado" },
+                { fieldName: "lat", label: "Latitude", format: { digitSeparator: false, places: 6 } },
+                { fieldName: "lng", label: "Longitude", format: { digitSeparator: false, places: 6 } }
+              ]
+            }
+          ]
+        });
+      
+        // Criar FeatureLayer com clustering nativo
+        const wellLayer = new FeatureLayer({
+          title: "Poços",
+          source: graphics,
+          objectIdField: "ObjectID",
+          fields: [
+            { name: "ObjectID", type: "oid" },
+            { name: "name", type: "string" },
+            { name: "bacia", type: "string" },
+            { name: "campo", type: "string" },
+            { name: "estado", type: "string" },
+            { name: "lat", type: "double" },
+            { name: "lng", type: "double" }
+          ],
+          renderer: {
+            type: "simple",
+            symbol: {
+              type: "simple-marker",
+              color: [239, 68, 68],
+              size: 8,
+              outline: { color: [255, 255, 255], width: 1.5 }
+            }
+          },
+          popupTemplate: popupTemplate,
+          // Clustering nativo do ArcGIS
+          featureReduction: {
+            type: "cluster",
+            clusterRadius: "80px",
+            clusterMinSize: "24px",
+            clusterMaxSize: "60px",
+            labelingInfo: [{
+              deconflictionStrategy: "none",
+              labelExpressionInfo: {
+                expression: "$feature.cluster_count"
+              },
+              symbol: {
+                type: "text",
+                color: "white",
+                font: { size: 12, weight: "bold" }
+              },
+              labelPlacement: "center-center"
+            }]
+          },
+          // Labels com nome do poço (visíveis no zoom alto)
+          labelingInfo: [{
+            labelExpressionInfo: { expression: "$feature.name" },
+            symbol: {
+              type: "text",
+              color: "white",
+              haloColor: [30, 58, 138, 200],
+              haloSize: 1.5,
+              font: { size: 9, weight: "bold" }
+            },
+            minScale: 150000
+          }]
+        });
+      
+        map.add(wellLayer);
+        state.arcgisLayer = wellLayer;
+      
+        // Zoom para encaixar todos os poços
+        view.when(() => {
+          if (wells.length > 1) {
+            const extent = {
+              xmin: Math.min(...wells.map(w => w.lng)),
+              ymin: Math.min(...wells.map(w => w.lat)),
+              xmax: Math.max(...wells.map(w => w.lng)),
+              ymax: Math.max(...wells.map(w => w.lat)),
+              spatialReference: { wkid: 4326 }
+            };
+            view.goTo({ target: extent, padding: { top: 40, bottom: 40, left: 40, right: 40 } });
+          }
+        });
+      
+        arcgisElements.title.textContent = `ArcGIS: ${wells.length} poço(s)`;
+        arcgisElements.apiStatus.textContent = "Conectada";
+        arcgisElements.apiStatus.style.color = "var(--success)";
+      
+        log("Mapa ArcGIS gerado", { wellsCount: wells.length });
+      });
+    }, 100); // Aguardar reflow do DOM
+    
+  } catch (error) {
+    console.error("Erro ao gerar mapa ArcGIS:", error);
+    showArcGISError(error.message || "Erro ao gerar mapa ArcGIS");
+  } finally {
+    arcgisElements.generateBtn.disabled = state.mapWells.length === 0;
+    arcgisElements.btnText.classList.remove("hidden");
+    arcgisElements.btnLoader.classList.add("hidden");
+  }
+}
+
+/**
+ * Limpa o mapa ArcGIS
+ */
+function clearArcGISMap() {
+  if (state.arcgisMapView) {
+    state.arcgisMapView.destroy();
+    state.arcgisMapView = null;
+    state.arcgisLayer = null;
+  }
+  
+  // Remover div de mapa criado dinamicamente
+  const oldMap = arcgisElements.mapContainer.querySelector(".arcgis-map-instance");
+  if (oldMap) oldMap.remove();
+  
+  arcgisElements.placeholder.style.display = "flex";
+  arcgisElements.mapContainer.style.cssText = "";
+  arcgisElements.title.textContent = "Mapa ArcGIS";
+  
+  clearArcGISError();
+  updateArcGISWellInfo();
+  
+  log("Mapa ArcGIS limpo");
+}
+
+/**
+ * Event listeners da aba ArcGIS
+ */
+function setupArcGISEventListeners() {
+  arcgisElements.generateBtn.addEventListener("click", generateArcGISMap);
+  arcgisElements.clearBtn.addEventListener("click", clearArcGISMap);
+}
+
+// ===============================================
 // INICIALIZAÇÃO
 // ===============================================
 
@@ -1840,6 +2165,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   
   setupEventListeners();
   setupMapEventListeners();
+  setupArcGISEventListeners();
   
   await checkURLParams();
   
@@ -1872,5 +2198,4 @@ window.removeWellFromMap = removeWellFromMap;
 window.removeBaciaFromMap = removeBaciaFromMap;
 window.removeCampoFromMap = removeCampoFromMap;
 window.toggleWellGroup = toggleWellGroup;
-window.focusWellOnMap = focusWellOnMap;
 window.viewWellProfile = viewWellProfile;

@@ -908,7 +908,7 @@ body {
 }
 
 /* ===============================================
-   FILTROS POR BACIA/CAMPO (v7.0 - Estilizado)
+   FILTROS POR BACIA/CAMPO (v6.0 - Estilizado)
    =============================================== */
 
 .filter-section {
@@ -1031,7 +1031,7 @@ body {
 }
 
 /* ===============================================
-   SIDEBAR HIERÁRQUICA - BACIA/CAMPO/POÇO (v7.0)
+   SIDEBAR AGRUPADA POR CAMPO (v6.1)
    =============================================== */
 
 .well-group {
@@ -1156,16 +1156,6 @@ body {
     font-size: 0.75rem;
 }
 
-.well-name-link {
-    cursor: pointer;
-    transition: color 0.15s;
-}
-
-.well-name-link:hover {
-    color: var(--primary-light);
-    text-decoration: underline;
-}
-
 /* ===============================================
    LABELS DOS PINS NO MAPA (v7.0)
    Etiqueta com fundo escuro abaixo do marcador
@@ -1280,4 +1270,52 @@ body {
 @keyframes logoFadeIn {
     from { opacity: 0; transform: translateY(-8px); }
     to { opacity: 1; transform: translateY(0); }
+}
+
+/* ===============================================
+   ARCGIS (v7.0)
+   =============================================== */
+
+/* Container dedicado - sem flex centering que conflita com WebGL */
+.arcgis-map-container {
+    flex: 1;
+    position: relative;
+    min-height: 500px;
+    background: var(--gray-50);
+    border-radius: 0.5rem;
+    overflow: hidden;
+}
+
+.arcgis-map-container .placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--gray-500);
+    text-align: center;
+    padding: 2rem;
+}
+
+.arcgis-map-container .placeholder svg {
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+#arcgisMap {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: none;
+}
+
+/* Info de poços no painel lateral do ArcGIS */
+.arcgis-well-info {
+    padding: 0.75rem;
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 0.375rem;
+    font-size: 0.8125rem;
 }
