@@ -1,52 +1,69 @@
-/* global google, markerClusterer, OverlappingMarkerSpiderfier */
-
 // ===============================================
 // K2 SISTEMAS - VISUALIZADOR DE POÇOS
-// Versão 7.0 - Comportamento unificado
+// Versão 8.0 - Modular
+//
+// Estrutura de arquivos:
+//   app.js              → Core: estado, config, DOM, token, abas, utils, init
+//   profile-viewer.js   → Aba Perfis: curvas, geração de perfil, imagem
+//   map-google.js       → Aba Google Maps: marcadores, clusters, sessões
+//   map-arcgis.js       → Aba ArcGIS: FeatureLayer, clustering nativo
+//
+// Ordem de carregamento no HTML:
+//   app.js → profile-viewer.js → map-google.js → map-arcgis.js
 // ===============================================
 
-// CONFIGURAÇÃO E ESTADO GLOBAL
+// ===============================================
+// CONFIGURAÇÃO GLOBAL
+// ===============================================
+
 const CONFIG = {
   API_URL: "/api",
   DEBUG_MODE: true
 };
 
+// ===============================================
+// ESTADO GLOBAL (compartilhado por todos os módulos)
+// ===============================================
+
 const state = {
   // ===== VIEWER (Perfis) =====
-  wells: [],
-  selectedWell: null,
-  availableCurves: [],
-  selectedCurves: [],
-  maxCurves: 3,
-  hasLito: true,
-  isLoading: false,
-  currentImageUrl: null,
-  lastParams: null,
-  
-  // ===== MAPA =====
-  geoWells: [],         // Todos os poços com coordenadas (do PostgreSQL)
-  mapWells: [],          // Poços selecionados para o mapa atual
-  mapWellsCoordinates: [],
-  mapInstance: null,
-  mapMarkers: [],
-  mapClusterer: null,
-  mapSpiderfier: null,       // Spiderfier para marcadores sobrepostos
-  googleMapsLoaded: false,
-  currentSessionId: null, // ID da sessão salva no banco
-  
+  wells: [],              // Poços DLIS disponíveis (API K2)
+  selectedWell: null,      // Poço selecionado para perfil
+  availableCurves: [],     // Curvas disponíveis do poço selecionado
+  selectedCurves: [],      // Curvas escolhidas pelo usuário
+  maxCurves: 3,            // Máximo de curvas por perfil
+  hasLito: true,           // Incluir litologia no perfil
+  isLoading: false,        // Flag de loading do perfil
+  currentImageUrl: null,   // URL da imagem do perfil gerado
+  lastParams: null,        // Últimos parâmetros usados na geração
+
+  // ===== MAPA (Google Maps) =====
+  geoWells: [],            // Todos os poços com coordenadas (PostgreSQL)
+  mapWells: [],            // Poços selecionados para o mapa atual
+  mapWellsCoordinates: [], // Coordenadas dos poços exibidos
+  mapInstance: null,        // Instância do google.maps.Map
+  mapMarkers: [],           // Marcadores no mapa
+  mapClusterer: null,       // MarkerClusterer
+  mapSpiderfier: null,      // OverlappingMarkerSpiderfier
+  googleMapsLoaded: false,  // Flag de carregamento da API
+  currentSessionId: null,   // ID da sessão salva no banco
+
   // ===== NAVEGAÇÃO =====
   currentTab: "viewer",
-  
+
   // ===== ARCGIS =====
-  arcgisMapView: null,
-  arcgisLayer: null,
-  arcgisLoaded: false,
-  
+  arcgisMapView: null,     // Instância do MapView
+  arcgisLayer: null,        // FeatureLayer de poços
+  arcgisLoaded: false,      // Flag de carregamento
+
   // ===== AUTENTICAÇÃO =====
   accessToken: null
 };
 
+// ===============================================
 // ELEMENTOS DO DOM - VIEWER
+// ===============================================
+
 const elements = {
   form: document.getElementById("profileForm"),
   wellInput: document.getElementById("wellInput"),
@@ -73,7 +90,10 @@ const elements = {
   debugContent: document.getElementById("debugContent")
 };
 
-// ELEMENTOS DO DOM - MAPA
+// ===============================================
+// ELEMENTOS DO DOM - MAPA (Google Maps)
+// ===============================================
+
 const mapElements = {
   wellInput: document.getElementById("mapWellInput"),
   wellsDatalist: document.getElementById("map-wells-datalist"),
@@ -94,14 +114,16 @@ const mapElements = {
   mapsApiStatus: document.getElementById("mapsApiStatus"),
   mapLinkPanel: document.getElementById("mapLinkPanel"),
   generatedMapLink: document.getElementById("generatedMapLink"),
-  // Novos elementos - Filtros por Bacia/Campo
   baciaSelect: document.getElementById("baciaSelect"),
   campoSelect: document.getElementById("campoSelect"),
   addByFilterBtn: document.getElementById("addByFilterBtn"),
   filterCount: document.getElementById("filterCount")
 };
 
+// ===============================================
 // ELEMENTOS DO DOM - ABAS
+// ===============================================
+
 const tabElements = {
   tabButtons: document.querySelectorAll(".tab-btn"),
   viewerContent: document.getElementById("viewer-content"),
@@ -109,7 +131,10 @@ const tabElements = {
   arcgisContent: document.getElementById("arcgis-content")
 };
 
+// ===============================================
 // ELEMENTOS DO DOM - ARCGIS
+// ===============================================
+
 const arcgisElements = {
   generateBtn: document.getElementById("generateArcGISBtn"),
   btnText: document.getElementById("arcgisBtnText"),
@@ -132,46 +157,46 @@ const arcgisElements = {
 
 function extractTokenFromHash() {
   const hash = window.location.hash;
-  
+
   if (!hash || !hash.includes("token=")) {
     log("Nenhum token encontrado no hash");
     return null;
   }
-  
+
   const match = hash.match(/token=([^&]+)/);
-  
+
   if (match && match[1]) {
     const token = match[1];
     log("Token extraído do hash", { length: token.length });
-    
+
     const currentTab = getTabFromHash();
     const newHash = currentTab ? `#${currentTab}` : "";
     window.history.replaceState(null, "", window.location.pathname + window.location.search + newHash);
-    
+
     return token;
   }
-  
+
   return null;
 }
 
 function loadToken() {
   const hashToken = extractTokenFromHash();
-  
+
   if (hashToken) {
     log("Token encontrado no hash, armazenando em sessão");
     sessionStorage.setItem("api_token", hashToken);
     state.accessToken = hashToken;
     return hashToken;
   }
-  
+
   const storedToken = sessionStorage.getItem("api_token");
-  
+
   if (storedToken) {
     log("Token recuperado do sessionStorage");
     state.accessToken = storedToken;
     return storedToken;
   }
-  
+
   log("Nenhum token disponível", null);
   return null;
 }
@@ -184,11 +209,11 @@ function clearToken() {
 
 function getFetchHeaders() {
   const headers = { "Content-Type": "application/json" };
-  
+
   if (state.accessToken) {
     headers["Authorization"] = `Bearer ${state.accessToken}`;
   }
-  
+
   return headers;
 }
 
@@ -210,18 +235,17 @@ function getTabFromHash() {
 
 function switchTab(tabName) {
   log("Mudando para aba", tabName);
-  
+
   state.currentTab = tabName;
-  
+
   tabElements.tabButtons.forEach(btn => {
     btn.classList.toggle("active", btn.dataset.tab === tabName);
   });
-  
-  // Desativar todas as abas e ativar a selecionada
+
   tabElements.viewerContent.classList.remove("active");
   tabElements.mapsContent.classList.remove("active");
   tabElements.arcgisContent.classList.remove("active");
-  
+
   if (tabName === "viewer") {
     tabElements.viewerContent.classList.add("active");
   } else if (tabName === "maps") {
@@ -230,10 +254,10 @@ function switchTab(tabName) {
     tabElements.arcgisContent.classList.add("active");
     updateArcGISWellInfo();
   }
-  
+
   const currentSearch = window.location.search;
   window.history.replaceState(null, "", `${window.location.pathname}${currentSearch}#${tabName}`);
-  
+
   log("Aba ativa", tabName);
 }
 
@@ -241,7 +265,7 @@ function setupTabNavigation() {
   tabElements.tabButtons.forEach(btn => {
     btn.addEventListener("click", () => switchTab(btn.dataset.tab));
   });
-  
+
   window.addEventListener("hashchange", () => {
     const tab = getTabFromHash();
     if (tab && tab !== state.currentTab) {
@@ -251,19 +275,19 @@ function setupTabNavigation() {
 }
 
 // ===============================================
-// FUNÇÕES AUXILIARES
+// FUNÇÕES UTILITÁRIAS
 // ===============================================
 
 function log(label, data = null) {
   if (!CONFIG.DEBUG_MODE) return;
-  
+
   const timestamp = new Date().toLocaleTimeString("pt-BR");
   const message = data ?
     `[${timestamp}] ${label}: ${JSON.stringify(data, null, 2)}` :
     `[${timestamp}] ${label}`;
-  
+
   console.log(label, data);
-  
+
   if (elements.debugContent) {
     elements.debugContent.textContent = message + "\n" + elements.debugContent.textContent;
   }
@@ -276,10 +300,10 @@ function updateStatus(message, type = "info") {
     error: "#ef4444",
     warning: "#f59e0b"
   };
-  
+
   elements.statusText.textContent = message;
   elements.statusText.style.color = colors[type] || colors.info;
-  
+
   if (type === "success") {
     elements.lastUpdate.textContent = new Date().toLocaleString("pt-BR");
   }
@@ -318,7 +342,7 @@ async function checkAPIHealth() {
       headers: getFetchHeaders()
     });
     const data = await response.json();
-    
+
     if (data.status === "ok") {
       elements.apiStatus.textContent = "Conectada";
       elements.apiStatus.style.color = "var(--success)";
@@ -341,25 +365,25 @@ async function checkAPIHealth() {
 async function loadWells() {
   try {
     log("Carregando poços DLIS (API K2)...");
-    
+
     const response = await fetch(`${CONFIG.API_URL}/wells`, {
       headers: getFetchHeaders()
     });
-    
+
     if (response.status === 401) {
       log("Erro 401 na API DLIS - token pode ser inválido ou API inacessível");
       return;
     }
-    
+
     const wells = await response.json();
-    
+
     state.wells = wells;
     log(`${wells.length} poços DLIS carregados`);
-    
-    elements.wellsList.innerHTML = wells.map(well => 
+
+    elements.wellsList.innerHTML = wells.map(well =>
       `<option value="${well.id}">${well.name} (${well.state})</option>`
     ).join("");
-    
+
   } catch (error) {
     log("Erro ao carregar poços DLIS", error);
   }
@@ -367,39 +391,38 @@ async function loadWells() {
 
 // ===============================================
 // CARREGAR LISTA DE POÇOS COM COORDENADAS (PostgreSQL - para Mapas)
-// Agora inclui Bacia e Campo para popular os filtros
 // ===============================================
 
 async function loadGeoWells() {
   try {
     log("Carregando poços com coordenadas (PostgreSQL)...");
-    
+
     const response = await fetch(`${CONFIG.API_URL}/wells-geo`, {
       headers: getFetchHeaders()
     });
-    
+
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
-    
+
     const wells = await response.json();
-    
+
     state.geoWells = wells;
     log(`${wells.length} poços com coordenadas carregados`);
-    
+
     // Popular datalist de poços individuais
-    mapElements.wellsDatalist.innerHTML = wells.map(well => 
+    mapElements.wellsDatalist.innerHTML = wells.map(well =>
       `<option value="${well.id}">${well.name} (${well.state})</option>`
     ).join("");
-    
+
     if (mapElements.mapsApiStatus) {
       mapElements.mapsApiStatus.textContent = `${wells.length} poços`;
       mapElements.mapsApiStatus.style.color = "var(--success)";
     }
-    
-    // Popular dropdown de Bacias (valores únicos, ordenados)
+
+    // Popular dropdown de Bacias
     populateBasinFilter();
-    
+
   } catch (error) {
     log("Erro ao carregar poços com coordenadas", error);
     if (mapElements.mapsApiStatus) {
@@ -410,473 +433,73 @@ async function loadGeoWells() {
 }
 
 // ===============================================
-// FILTROS POR BACIA E CAMPO
+// FILTROS POR BACIA (população inicial)
 // ===============================================
 
-/**
- * Popula o dropdown de Bacias com valores únicos dos poços carregados
- */
 function populateBasinFilter() {
-  // Extrair bacias únicas (ignorar vazias)
   const bacias = [...new Set(
     state.geoWells
       .map(w => w.bacia)
       .filter(b => b && b.trim() !== "")
   )].sort();
-  
+
   log(`${bacias.length} bacias encontradas`);
-  
-  // Popular o select de bacias
-  mapElements.baciaSelect.innerHTML = 
+
+  mapElements.baciaSelect.innerHTML =
     "<option value=\"\">Selecione uma bacia...</option>" +
     bacias.map(b => `<option value="${b}">${b}</option>`).join("");
 }
 
-/**
- * Quando uma bacia é selecionada, popula o dropdown de Campos
- * correspondentes àquela bacia
- */
-function onBaciaChange() {
-  const selectedBacia = mapElements.baciaSelect.value;
-  
-  // Resetar campo
-  mapElements.campoSelect.innerHTML = "<option value=\"\">Todos os campos</option>";
-  mapElements.campoSelect.disabled = !selectedBacia;
-  
-  if (!selectedBacia) {
-    updateFilterCount();
-    return;
-  }
-  
-  // Extrair campos únicos da bacia selecionada
-  const campos = [...new Set(
-    state.geoWells
-      .filter(w => w.bacia === selectedBacia)
-      .map(w => w.campo)
-      .filter(c => c && c.trim() !== "")
-  )].sort();
-  
-  log(`${campos.length} campos na bacia ${selectedBacia}`);
-  
-  // Popular o select de campos
-  mapElements.campoSelect.innerHTML = 
-    "<option value=\"\">Todos os campos</option>" +
-    campos.map(c => `<option value="${c}">${c}</option>`).join("");
-  
-  updateFilterCount();
-}
-
-/**
- * Atualiza o contador de poços que serão adicionados pelo filtro
- */
-function updateFilterCount() {
-  const count = getFilteredWells().length;
-  
-  if (mapElements.filterCount) {
-    // Ícone de pin SVG para exibir ao lado do contador
-    const pinIcon = "<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z\"></path><circle cx=\"12\" cy=\"10\" r=\"3\"></circle></svg>";
-    
-    if (count > 0) {
-      mapElements.filterCount.innerHTML = `${pinIcon} ${count} poço(s) encontrado(s)`;
-      mapElements.filterCount.classList.add("has-results");
-    } else {
-      mapElements.filterCount.innerHTML = "Selecione uma bacia";
-      mapElements.filterCount.classList.remove("has-results");
-    }
-  }
-  
-  // Habilitar/desabilitar botão de adicionar
-  if (mapElements.addByFilterBtn) {
-    mapElements.addByFilterBtn.disabled = count === 0;
-  }
-}
-
-/**
- * Retorna os poços que correspondem aos filtros selecionados
- */
-function getFilteredWells() {
-  const selectedBacia = mapElements.baciaSelect.value;
-  const selectedCampo = mapElements.campoSelect.value;
-  
-  if (!selectedBacia) return [];
-  
-  return state.geoWells.filter(w => {
-    // Filtrar por bacia
-    if (w.bacia !== selectedBacia) return false;
-    // Filtrar por campo (se selecionado)
-    if (selectedCampo && w.campo !== selectedCampo) return false;
-    return true;
-  });
-}
-
-/**
- * Adiciona todos os poços do filtro à seleção do mapa
- */
-function addWellsByFilter() {
-  const filteredWells = getFilteredWells();
-  
-  if (filteredWells.length === 0) {
-    showMapError("Nenhum poço corresponde ao filtro selecionado");
-    return;
-  }
-  
-  let added = 0;
-  
-  filteredWells.forEach(well => {
-    // Só adicionar se ainda não estiver na lista
-    if (!state.mapWells.find(w => w.id === well.id)) {
-      state.mapWells.push(well);
-      added++;
-    }
-  });
-  
-  updateMapWellsDisplay();
-  clearMapError();
-  
-  const bacia = mapElements.baciaSelect.value;
-  const campo = mapElements.campoSelect.value;
-  const filterDesc = campo ? `${campo} (${bacia})` : bacia;
-  
-  log(`${added} poços adicionados pelo filtro`, { 
-    filtro: filterDesc, 
-    total: state.mapWells.length 
-  });
-}
-
 // ===============================================
-// EVENT LISTENERS - VIEWER
+// ROTEADOR DE URL (despacha para viewer ou mapa)
 // ===============================================
-
-function setupEventListeners() {
-  elements.form.addEventListener("submit", generateProfile);
-  elements.wellInput.addEventListener("change", handleWellSelection);
-  elements.wellInput.addEventListener("input", handleWellInput);
-  
-  elements.hasLitoInput.addEventListener("change", (e) => {
-    state.hasLito = e.target.checked;
-    log("Litologia alterada", state.hasLito);
-  });
-  
-  elements.downloadBtn.addEventListener("click", downloadImage);
-  document.getElementById("copyBtn")?.addEventListener("click", copyLink);
-  elements.fullscreenBtn.addEventListener("click", toggleFullscreen);
-  elements.toggleDebug.addEventListener("click", toggleDebug);
-  elements.clearDebug.addEventListener("click", clearDebugPanel);
-  
-  document.addEventListener("keydown", handleKeyPress);
-}
-
-function handleWellInput(e) {
-  const value = e.target.value;
-  
-  if (!value && state.selectedWell) {
-    log("Resetando seleção de poço");
-    state.selectedWell = null;
-    state.availableCurves = [];
-    state.selectedCurves = [];
-    resetCurvesDisplay();
-    elements.generateBtn.disabled = true;
-  }
-}
-
-async function handleWellSelection(e) {
-  const wellId = e.target.value;
-  
-  const well = state.wells.find(w => w.id === wellId);
-  if (!well) {
-    log("Poço não encontrado", wellId);
-    return;
-  }
-  
-  log("Poço selecionado", well);
-  state.selectedWell = well;
-  
-  await loadWellCurves(wellId);
-}
-
-async function loadWellCurves(wellId) {
-  try {
-    clearError();
-    
-    elements.curvesContainer.innerHTML = "<div class=\"placeholder-text\">Carregando curvas...</div>";
-    
-    const response = await fetch(`${CONFIG.API_URL}/wells/${wellId}/curves`, {
-      headers: getFetchHeaders()
-    });
-    
-    if (response.status === 401) {
-      showError("Não autenticado. Token inválido ou ausente.");
-      log("Erro 401: Token inválido");
-      clearToken();
-      return;
-    }
-    
-    const data = await response.json();
-    
-    if (data.curves && data.curves.length > 0) {
-      state.availableCurves = data.curves;
-      state.selectedCurves = [];
-      displayCurveSelector(data.curves);
-      log(`${data.curves.length} curvas disponíveis`);
-    } else {
-      elements.curvesContainer.innerHTML = "<div class=\"placeholder-text\">Nenhuma curva disponível</div>";
-      log("Nenhuma curva encontrada");
-    }
-    
-  } catch (error) {
-    log("Erro ao carregar curvas", error);
-    elements.curvesContainer.innerHTML = "<div class=\"placeholder-text\">Erro ao carregar curvas</div>";
-  }
-}
-
-function displayCurveSelector(curves) {
-  elements.curvesContainer.classList.add("has-curves");
-  
-  const chipsHTML = curves.map(curve => 
-    `<button type="button" class="curve-chip" data-curve="${curve}">${curve}</button>`
-  ).join("");
-  
-  elements.curvesContainer.innerHTML = `
-    <div class="curves-selector">${chipsHTML}</div>
-    <div class="selection-counter">
-      <span id="selectionCount">0</span>/${state.maxCurves} curvas selecionadas
-    </div>
-  `;
-  
-  document.querySelectorAll(".curve-chip").forEach(chip => {
-    chip.addEventListener("click", () => toggleCurveSelection(chip));
-  });
-}
-
-function toggleCurveSelection(chip) {
-  const curve = chip.dataset.curve;
-  
-  if (chip.classList.contains("selected")) {
-    chip.classList.remove("selected");
-    state.selectedCurves = state.selectedCurves.filter(c => c !== curve);
-  } else {
-    if (state.selectedCurves.length >= state.maxCurves) {
-      showMaxReachedFeedback();
-      return;
-    }
-    
-    chip.classList.add("selected");
-    state.selectedCurves.push(curve);
-  }
-  
-  updateCurveSelectionUI();
-  updateURL();
-}
-
-function updateCurveSelectionUI() {
-  const count = state.selectedCurves.length;
-  const counter = document.getElementById("selectionCount");
-  if (counter) counter.textContent = count;
-  
-  const allChips = document.querySelectorAll(".curve-chip");
-  
-  if (count >= state.maxCurves) {
-    allChips.forEach(chip => {
-      if (!chip.classList.contains("selected")) {
-        chip.classList.add("disabled");
-      }
-    });
-  } else {
-    allChips.forEach(chip => chip.classList.remove("disabled"));
-  }
-  
-  elements.generateBtn.disabled = count === 0;
-  
-  log("Seleção atualizada", { count, curves: state.selectedCurves });
-}
-
-function showMaxReachedFeedback() {
-  const container = document.querySelector(".curves-selector");
-  container.classList.add("shake");
-  setTimeout(() => container.classList.remove("shake"), 300);
-}
-
-function resetCurvesDisplay() {
-  elements.curvesContainer.classList.remove("has-curves");
-  elements.curvesContainer.innerHTML = "<div class=\"placeholder-text\">Selecione um poço primeiro</div>";
-}
-
-// ===============================================
-// GERAR PERFIL
-// ===============================================
-
-async function generateProfile(e) {
-  if (e) e.preventDefault();
-  
-  if (!state.selectedWell || state.selectedCurves.length === 0) {
-    showError("Selecione um poço e pelo menos uma curva");
-    return;
-  }
-  
-  if (!state.accessToken) {
-    showError("Token de autenticação não disponível. Recarregue a página com um link válido.");
-    return;
-  }
-  
-  const params = {
-    well: state.selectedWell.id,
-    curves: state.selectedCurves,
-    hasLito: state.hasLito
-  };
-  
-  log("Gerando perfil", params);
-  state.lastParams = params;
-  
-  showLoading();
-  
-  try {
-    const response = await fetch("/api/generate-profile", {
-      method: "POST",
-      headers: getFetchHeaders(),
-      body: JSON.stringify(params)
-    });
-    
-    if (response.status === 401) {
-      throw new Error("Token inválido ou expirado. Solicite um novo link.");
-    }
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `HTTP ${response.status}`);
-    }
-    
-    const blob = await response.blob();
-    const imageUrl = URL.createObjectURL(blob);
-    
-    displayImage(imageUrl, params);
-    updateURL();
-    
-    log("Perfil gerado com sucesso");
-    
-  } catch (error) {
-    console.error("Erro ao gerar perfil:", error);
-    showError(error.message || "Erro ao gerar o perfil. Tente novamente.");
-    
-    if (error.message.includes("Token")) {
-      clearToken();
-    }
-  } finally {
-    hideLoading();
-  }
-}
-
-function showLoading() {
-  state.isLoading = true;
-  elements.generateBtn.disabled = true;
-  elements.btnText.classList.add("hidden");
-  elements.btnLoader.classList.remove("hidden");
-  
-  elements.imageContainer.innerHTML = `
-    <div class="loading-overlay">
-      <div class="loading-content">
-        <div class="loading-spinner"></div>
-        <p>Gerando perfil composto...</p>
-        <p style="font-size: 0.75rem; margin-top: 0.5rem; color: #6b7280;">
-          Processando dados do poço ${state.selectedWell.id}...
-        </p>
-      </div>
-    </div>
-  `;
-  
-  updateStatus("Processando...", "info");
-}
-
-function hideLoading() {
-  state.isLoading = false;
-  elements.generateBtn.disabled = false;
-  elements.btnText.classList.remove("hidden");
-  elements.btnLoader.classList.add("hidden");
-}
-
-function displayImage(imageUrl, params) {
-  elements.imageContainer.innerHTML = `
-    <img src="${imageUrl}" 
-         alt="Perfil Composto - ${params.well}"
-         style="max-width: 100%; height: auto;">
-  `;
-  
-  elements.vizTitle.textContent = `Perfil: ${params.well}`;
-  elements.downloadBtn.disabled = false;
-  elements.fullscreenBtn.disabled = false;
-  
-  state.currentImageUrl = imageUrl;
-  updateStatus("Perfil gerado com sucesso", "success");
-  
-  log("Perfil exibido", { well: params.well, curves: params.curves });
-}
-
-function updateURL() {
-  if (!state.selectedWell || state.selectedCurves.length === 0) {
-    window.history.replaceState({}, "", "/#viewer");
-    return;
-  }
-  
-  const params = new URLSearchParams();
-  params.set("well", state.selectedWell.id);
-  params.set("curves", state.selectedCurves.join(","));
-  if (state.hasLito) params.set("lito", "true");
-  
-  const visibleURL = `/?${params.toString()}#viewer`;
-  window.history.replaceState({}, "", visibleURL);
-  
-  const tokenPart = getTokenHashPart();
-  const shareableURL = `${window.location.origin}/?${params.toString()}#${tokenPart}viewer`;
-  elements.generatedLink.value = shareableURL;
-  elements.linkPanel.classList.remove("hidden");
-  
-  log("URL atualizada", visibleURL);
-}
 
 async function checkURLParams() {
   const urlParams = new URLSearchParams(window.location.search);
-  
+
   const wellId = urlParams.get("well");
   const curvesParam = urlParams.get("curves");
   const hasLito = urlParams.get("lito") === "true";
-  
-  // NOVO: Verificar se há um ID de sessão na URL
+
+  // Verificar se há um ID de sessão na URL (mapa)
   const sessionId = urlParams.get("sid");
   if (sessionId) {
     await processSessionURLParam(sessionId);
     return;
   }
-  
-  // Compatibilidade: formato antigo com ?wells=
+
+  // Compatibilidade: formato antigo com ?wells= (mapa)
   const wellsParam = urlParams.get("wells");
   if (wellsParam) {
     await processMapURLParams(wellsParam);
     return;
   }
-  
+
+  // Parâmetros de perfil
   if (!wellId || !curvesParam) {
     log("Sem parâmetros na URL");
     return;
   }
-  
+
   log("Parâmetros encontrados na URL", { wellId, curves: curvesParam, hasLito });
-  
+
   if (state.wells.length === 0) {
     await new Promise(resolve => setTimeout(resolve, 500));
   }
-  
+
   const well = state.wells.find(w => w.id === wellId);
   if (!well) {
     log("Poço da URL não encontrado", wellId);
     return;
   }
-  
+
   elements.wellInput.value = wellId;
   elements.hasLitoInput.checked = hasLito;
   state.hasLito = hasLito;
   state.selectedWell = well;
-  
+
   await loadWellCurves(wellId);
-  
+
   const curves = curvesParam.split(",");
   curves.forEach(curve => {
     const chip = document.querySelector(`[data-curve="${curve}"]`);
@@ -884,7 +507,7 @@ async function checkURLParams() {
       chip.click();
     }
   });
-  
+
   if (state.selectedCurves.length > 0) {
     log("Gerando perfil automaticamente da URL");
     setTimeout(() => generateProfile(), 500);
@@ -892,61 +515,8 @@ async function checkURLParams() {
 }
 
 // ===============================================
-// FUNÇÕES DE AÇÃO - VIEWER
+// ATALHOS DE TECLADO (despacho entre abas)
 // ===============================================
-
-function downloadImage() {
-  if (!state.currentImageUrl || !state.lastParams) return;
-  
-  const link = document.createElement("a");
-  link.href = state.currentImageUrl;
-  link.download = `perfil_${state.lastParams.well}_${Date.now()}.png`;
-  link.click();
-  
-  log("Download iniciado", { well: state.lastParams.well });
-}
-
-function toggleFullscreen() {
-  const img = elements.imageContainer.querySelector("img");
-  if (!img) return;
-  
-  if (img.requestFullscreen) {
-    img.requestFullscreen();
-  } else if (img.webkitRequestFullscreen) {
-    img.webkitRequestFullscreen();
-  } else if (img.msRequestFullscreen) {
-    img.msRequestFullscreen();
-  }
-  
-  log("Tela cheia ativada");
-}
-
-function toggleDebug() {
-  elements.debugPanel.classList.toggle("hidden");
-}
-
-function clearDebugPanel() {
-  elements.debugContent.textContent = "";
-  log("Debug limpo");
-}
-
-async function copyLink() {
-  const input = elements.generatedLink;
-  const btn = document.getElementById("copyBtn");
-  
-  await navigator.clipboard.writeText(input.value);
-  
-  const originalHTML = btn.innerHTML;
-  btn.innerHTML = "✓";
-  btn.style.background = "var(--success)";
-  
-  setTimeout(() => {
-    btn.innerHTML = originalHTML;
-    btn.style.background = "";
-  }, 2000);
-  
-  log("Link copiado", input.value);
-}
 
 function handleKeyPress(e) {
   if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && !state.isLoading) {
@@ -956,12 +526,12 @@ function handleKeyPress(e) {
       generateMap();
     }
   }
-  
+
   if ((e.ctrlKey || e.metaKey) && e.key === "d") {
     e.preventDefault();
     toggleDebug();
   }
-  
+
   if ((e.ctrlKey || e.metaKey) && e.key === "s" && state.currentImageUrl) {
     e.preventDefault();
     downloadImage();
@@ -969,1180 +539,14 @@ function handleKeyPress(e) {
 }
 
 // ===============================================
-// MAPA - EVENT LISTENERS
-// ===============================================
-
-function setupMapEventListeners() {
-  mapElements.addWellBtn.addEventListener("click", addWellToMap);
-  
-  mapElements.wellInput.addEventListener("keypress", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      addWellToMap();
-    }
-  });
-  
-  mapElements.generateMapBtn.addEventListener("click", generateMap);
-  mapElements.clearMapBtn.addEventListener("click", clearMapSelection);
-  mapElements.downloadMapBtn.addEventListener("click", downloadStaticMap);
-  mapElements.copyMapLinkBtn?.addEventListener("click", copyMapLink);
-  
-  // Event listeners dos filtros por Bacia/Campo
-  mapElements.baciaSelect.addEventListener("change", () => {
-    onBaciaChange();
-  });
-  mapElements.campoSelect.addEventListener("change", () => {
-    updateFilterCount();
-  });
-  mapElements.addByFilterBtn.addEventListener("click", addWellsByFilter);
-}
-
-// ===============================================
-// MAPA - ADICIONAR/REMOVER POÇOS
-// ===============================================
-
-function addWellToMap() {
-  const wellId = mapElements.wellInput.value.trim();
-  
-  if (!wellId) {
-    log("Nenhum poço informado");
-    return;
-  }
-  
-  if (state.mapWells.find(w => w.id === wellId)) {
-    log("Poço já está na lista", wellId);
-    mapElements.wellInput.value = "";
-    return;
-  }
-  
-  const well = state.geoWells.find(w => w.id === wellId);
-  if (!well) {
-    showMapError(`Poço "${wellId}" não encontrado ou sem coordenadas`);
-    return;
-  }
-  
-  state.mapWells.push(well);
-  mapElements.wellInput.value = "";
-  
-  updateMapWellsDisplay();
-  clearMapError();
-  
-  log("Poço adicionado ao mapa", well);
-}
-
-function removeWellFromMap(wellId) {
-  // Remover marcador do clusterer, spiderfier e mapa
-  const markerIndex = state.mapMarkers.findIndex(m => m.wellId === wellId);
-  if (markerIndex >= 0) {
-    const marker = state.mapMarkers[markerIndex];
-    if (state.mapSpiderfier) {
-      state.mapSpiderfier.removeMarker(marker);
-    }
-    if (state.mapClusterer) {
-      state.mapClusterer.removeMarker(marker);
-    } else {
-      marker.setMap(null);
-    }
-    state.mapMarkers.splice(markerIndex, 1);
-  }
-  
-  state.mapWells = state.mapWells.filter(w => w.id !== wellId);
-  updateMapWellsDisplay();
-  log("Poço removido do mapa", wellId);
-}
-
-function clearMapSelection() {
-  state.mapWells = [];
-  state.mapWellsCoordinates = [];
-  state.currentSessionId = null;
-  updateMapWellsDisplay();
-  
-  // Limpar clusterer se ativo
-  if (state.mapClusterer) {
-    state.mapClusterer.clearMarkers();
-    state.mapClusterer = null;
-  }
-  
-  if (state.mapSpiderfier) {
-    state.mapSpiderfier = null;
-  }
-  
-  state.mapMarkers.forEach(marker => marker.setMap(null));
-  state.mapMarkers = [];
-  
-  const placeholder = document.getElementById("mapPlaceholder");
-  const mapDiv = document.getElementById("googleMap");
-  
-  if (placeholder) placeholder.style.display = "flex";
-  if (mapDiv) mapDiv.style.display = "none";
-  
-  mapElements.mapLinkPanel.classList.add("hidden");
-  mapElements.downloadMapBtn.disabled = true;
-  mapElements.mapTitle.textContent = "Mapa de Localização";
-  
-  // Resetar filtros
-  mapElements.baciaSelect.value = "";
-  mapElements.campoSelect.innerHTML = "<option value=\"\">Todos os campos</option>";
-  mapElements.campoSelect.disabled = true;
-  updateFilterCount();
-  
-  log("Seleção de mapa limpa");
-}
-
-// ===============================================
-// MAPA - SIDEBAR HIERÁRQUICA (Bacia → Campo → Poços)
-// Três níveis com remoção independente em cada nível
-// ===============================================
-
-function updateMapWellsDisplay() {
-  const count = state.mapWells.length;
-  
-  mapElements.wellCount.textContent = `(${count})`;
-  mapElements.mapStatusCount.textContent = count;
-  mapElements.generateMapBtn.disabled = count === 0;
-  
-  if (count === 0) {
-    mapElements.wellsList.innerHTML = "<div class=\"placeholder-text\">Nenhum poço selecionado</div>";
-    return;
-  }
-  
-  // Estrutura de 3 níveis: Bacia → Campo → Poços
-  const hierarchy = {};
-  state.mapWells.forEach(well => {
-    const bacia = well.bacia || "Sem Bacia";
-    const campo = well.campo || "Sem Campo";
-    if (!hierarchy[bacia]) hierarchy[bacia] = {};
-    if (!hierarchy[bacia][campo]) hierarchy[bacia][campo] = [];
-    hierarchy[bacia][campo].push(well);
-  });
-  
-  const sortedBacias = Object.keys(hierarchy).sort();
-  
-  mapElements.wellsList.innerHTML = sortedBacias.map(bacia => {
-    const campos = hierarchy[bacia];
-    const baciaId = sanitizeId(bacia);
-    const baciaWellCount = Object.values(campos).reduce((sum, wells) => sum + wells.length, 0);
-    const sortedCampos = Object.keys(campos).sort();
-    
-    return `
-      <div class="well-group">
-        <div class="well-group-header" onclick="toggleWellGroup('bacia-${baciaId}')">
-          <svg class="well-group-arrow" id="arrow-bacia-${baciaId}" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="9 18 15 12 9 6"></polyline>
-          </svg>
-          <span class="well-group-name">${bacia}</span>
-          <span class="well-group-count">${baciaWellCount}</span>
-          <button class="btn-remove-group" onclick="event.stopPropagation(); removeBaciaFromMap('${bacia.replace(/'/g, "\\'")}')" title="Remover bacia">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
-        </div>
-        <div class="well-group-items" id="group-bacia-${baciaId}" style="display: none;">
-          ${sortedCampos.map(campo => {
-    const campoId = sanitizeId(`${bacia}_${campo}`);
-    const campoWells = campos[campo];
-            
-    return `
-              <div class="well-subgroup">
-                <div class="well-subgroup-header" onclick="toggleWellGroup('campo-${campoId}')">
-                  <svg class="well-group-arrow" id="arrow-campo-${campoId}" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="9 18 15 12 9 6"></polyline>
-                  </svg>
-                  <span class="well-subgroup-name">${campo}</span>
-                  <span class="well-subgroup-count">${campoWells.length}</span>
-                  <button class="btn-remove-group" onclick="event.stopPropagation(); removeCampoFromMap('${bacia.replace(/'/g, "\\'")}', '${campo.replace(/'/g, "\\'")}')" title="Remover campo">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <line x1="18" y1="6" x2="6" y2="18"></line>
-                      <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                  </button>
-                </div>
-                <div class="well-subgroup-items" id="group-campo-${campoId}" style="display: none;">
-                  ${campoWells.map(well => `
-                    <div class="map-well-item well-item-deep">
-                      <span class="well-label">
-                        <span class="well-marker-dot"></span>
-                        <span>${well.id}</span>
-                      </span>
-                      <button class="btn-remove" onclick="removeWellFromMap('${well.id}')" title="Remover poço">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <line x1="18" y1="6" x2="6" y2="18"></line>
-                          <line x1="6" y1="6" x2="18" y2="18"></line>
-                        </svg>
-                      </button>
-                    </div>
-                  `).join("")}
-                </div>
-              </div>
-            `;
-  }).join("")}
-        </div>
-      </div>
-    `;
-  }).join("");
-}
-
-/**
- * Gera um ID seguro para uso em atributos HTML
- */
-function sanitizeId(str) {
-  return str.replace(/[^a-zA-Z0-9]/g, "_");
-}
-
-/**
- * Expande/recolhe um grupo na sidebar (funciona para bacias e campos)
- */
-function toggleWellGroup(groupId) {
-  const items = document.getElementById(`group-${groupId}`);
-  const arrow = document.getElementById(`arrow-${groupId}`);
-  
-  if (!items || !arrow) return;
-  
-  if (items.style.display === "none") {
-    items.style.display = "block";
-    arrow.classList.add("expanded");
-  } else {
-    items.style.display = "none";
-    arrow.classList.remove("expanded");
-  }
-}
-
-/**
- * Remove todos os poços de uma bacia
- */
-function removeBaciaFromMap(bacia) {
-  const toRemove = state.mapWells.filter(w => (w.bacia || "Sem Bacia") === bacia);
-  
-  toRemove.forEach(well => {
-    const markerIndex = state.mapMarkers.findIndex(m => m.wellId === well.id);
-    if (markerIndex >= 0) {
-      const marker = state.mapMarkers[markerIndex];
-      if (state.mapSpiderfier) state.mapSpiderfier.removeMarker(marker);
-      if (state.mapClusterer) state.mapClusterer.removeMarker(marker);
-      else marker.setMap(null);
-      state.mapMarkers.splice(markerIndex, 1);
-    }
-  });
-  
-  state.mapWells = state.mapWells.filter(w => (w.bacia || "Sem Bacia") !== bacia);
-  updateMapWellsDisplay();
-  log(`Bacia removida: ${bacia}`, { removidos: toRemove.length, restantes: state.mapWells.length });
-}
-
-/**
- * Remove todos os poços de um campo dentro de uma bacia
- */
-function removeCampoFromMap(bacia, campo) {
-  const toRemove = state.mapWells.filter(w => 
-    (w.bacia || "Sem Bacia") === bacia && (w.campo || "Sem Campo") === campo
-  );
-  
-  toRemove.forEach(well => {
-    const markerIndex = state.mapMarkers.findIndex(m => m.wellId === well.id);
-    if (markerIndex >= 0) {
-      const marker = state.mapMarkers[markerIndex];
-      if (state.mapSpiderfier) state.mapSpiderfier.removeMarker(marker);
-      if (state.mapClusterer) state.mapClusterer.removeMarker(marker);
-      else marker.setMap(null);
-      state.mapMarkers.splice(markerIndex, 1);
-    }
-  });
-  
-  state.mapWells = state.mapWells.filter(w => 
-    !((w.bacia || "Sem Bacia") === bacia && (w.campo || "Sem Campo") === campo)
-  );
-  updateMapWellsDisplay();
-  log(`Campo removido: ${campo} (${bacia})`, { removidos: toRemove.length, restantes: state.mapWells.length });
-}
-
-// ===============================================
-// MAPA - CARREGAR GOOGLE MAPS API
-// ===============================================
-
-function loadGoogleMapsAPI() {
-  return new Promise((resolve, reject) => {
-    if (state.googleMapsLoaded && window.google && window.google.maps) {
-      log("Google Maps API já carregada");
-      resolve();
-      return;
-    }
-    
-    fetch("/api/maps-config")
-      .then(response => {
-        if (!response.ok) {
-          throw new Error("Falha ao buscar configuração do Maps");
-        }
-        return response.json();
-      })
-      .then(config => {
-        if (!config.apiKey) {
-          throw new Error("Google Maps API Key não configurada no servidor");
-        }
-        
-        log("API Key obtida, carregando Google Maps...");
-        
-        window.initGoogleMapsCallback = function() {
-          log("Google Maps API carregada com sucesso");
-          state.googleMapsLoaded = true;
-          resolve();
-        };
-        
-        const script = document.createElement("script");
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${config.apiKey}&callback=initGoogleMapsCallback`;
-        script.async = true;
-        script.defer = true;
-        
-        script.onerror = function() {
-          log("Erro ao carregar script do Google Maps");
-          reject(new Error("Falha ao carregar Google Maps API"));
-        };
-        
-        document.head.appendChild(script);
-      })
-      .catch(error => {
-        log("Erro no loadGoogleMapsAPI", error.message);
-        reject(error);
-      });
-  });
-}
-
-// ===============================================
-// MAPA - GERAR
-// ===============================================
-
-async function generateMap() {
-  if (state.mapWells.length === 0) {
-    showMapError("Adicione pelo menos um poço");
-    return;
-  }
-  
-  clearMapError();
-  showMapLoading();
-  
-  try {
-    log("Verificando Google Maps API...");
-    await loadGoogleMapsAPI();
-    
-    const wellNames = state.mapWells.map(w => w.id);
-    log("Buscando coordenadas para poços", { count: wellNames.length });
-    
-    const response = await fetch(`${CONFIG.API_URL}/wells-coordinates`, {
-      method: "POST",
-      headers: getFetchHeaders(),
-      body: JSON.stringify({ wellNames })
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `HTTP ${response.status}`);
-    }
-    
-    const data = await response.json();
-    log("Coordenadas recebidas", { count: data.count });
-    
-    displayMap(data);
-    
-    // Criar sessão no banco e gerar link curto
-    await updateMapURLWithSession();
-    
-  } catch (error) {
-    console.error("Erro ao gerar mapa:", error);
-    showMapError(error.message || "Erro ao gerar mapa");
-  } finally {
-    hideMapLoading();
-  }
-}
-
-function showMapLoading() {
-  mapElements.generateMapBtn.disabled = true;
-  mapElements.mapBtnText.classList.add("hidden");
-  mapElements.mapBtnLoader.classList.remove("hidden");
-  
-  const placeholder = document.getElementById("mapPlaceholder");
-  const mapDiv = document.getElementById("googleMap");
-  
-  if (placeholder) placeholder.style.display = "none";
-  if (mapDiv) mapDiv.style.display = "none";
-  
-  let loadingEl = document.getElementById("mapLoadingOverlay");
-  if (!loadingEl) {
-    loadingEl = document.createElement("div");
-    loadingEl.id = "mapLoadingOverlay";
-    loadingEl.className = "loading-overlay";
-    loadingEl.innerHTML = `
-      <div class="loading-content">
-        <div class="loading-spinner"></div>
-        <p>Carregando mapa...</p>
-      </div>
-    `;
-    mapElements.mapContainer.appendChild(loadingEl);
-  } else {
-    loadingEl.style.display = "flex";
-  }
-}
-
-function hideMapLoading() {
-  mapElements.generateMapBtn.disabled = state.mapWells.length === 0;
-  mapElements.mapBtnText.classList.remove("hidden");
-  mapElements.mapBtnLoader.classList.add("hidden");
-  
-  const loadingEl = document.getElementById("mapLoadingOverlay");
-  if (loadingEl) {
-    loadingEl.style.display = "none";
-  }
-}
-
-function displayMap(data) {
-  // Reordenar wells para corresponder à ordem de state.mapWells
-  const wells = state.mapWells.map(mapWell => {
-    return data.wells.find(w => w.name === mapWell.id) || null;
-  }).filter(w => w !== null);
-  
-  const placeholder = document.getElementById("mapPlaceholder");
-  const mapDiv = document.getElementById("googleMap");
-  
-  if (placeholder) placeholder.style.display = "none";
-  if (mapDiv) mapDiv.style.display = "block";
-  
-  const avgLat = wells.reduce((sum, w) => sum + w.lat, 0) / wells.length;
-  const avgLng = wells.reduce((sum, w) => sum + w.lng, 0) / wells.length;
-  
-  const map = new google.maps.Map(mapDiv, {
-    center: { lat: avgLat, lng: avgLng },
-    zoom: 8,
-    mapTypeId: "terrain"
-  });
-  
-  state.mapInstance = map;
-  
-  // Limpar marcadores, clusterer e spiderfier antigos
-  state.mapMarkers.forEach(marker => marker.setMap(null));
-  state.mapMarkers = [];
-  if (state.mapClusterer) {
-    state.mapClusterer.clearMarkers();
-    state.mapClusterer = null;
-  }
-  state.mapSpiderfier = null;
-  
-  const bounds = new google.maps.LatLngBounds();
-  
-  // Inicializar Spiderfier para separar marcadores sobrepostos
-  // Quando dois poços têm coordenadas iguais/próximas, o clique abre em leque
-  let oms = null;
-  if (window.OverlappingMarkerSpiderfier) {
-    oms = new OverlappingMarkerSpiderfier(map, {
-      markersWontMove: true,
-      markersWontHide: true,
-      basicFormatEvents: true,
-      keepSpiderfied: true
-    });
-    state.mapSpiderfier = oms;
-    log("Spiderfier inicializado");
-  }
-  
-  // InfoWindow compartilhado - só um aberto por vez
-  const sharedInfoWindow = new google.maps.InfoWindow();
-  
-  // Ícone padrão com labelOrigin posicionado abaixo do pin
-  // Isso faz a etiqueta com nome do poço aparecer embaixo do marcador
-  const pinIcon = {
-    url: "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
-    scaledSize: new google.maps.Size(32, 32),
-    labelOrigin: new google.maps.Point(16, 44)
-  };
-  
-  wells.forEach((well) => {
-    const position = { lat: well.lat, lng: well.lng };
-    
-    // Buscar dados completos (bacia, campo) do geoWells
-    const fullWell = state.mapWells.find(mw => mw.id === well.name);
-    const bacia = fullWell ? fullWell.bacia : "";
-    const campo = fullWell ? fullWell.campo : "";
-    
-    const markerOptions = {
-      position: position,
-      // Clusterer gerencia a exibição - não adiciona direto ao mapa
-      map: null,
-      title: well.name,
-      icon: pinIcon,
-      // Nome do poço como label com classe CSS para fundo escuro
-      label: {
-        text: well.name,
-        className: "well-pin-label"
-      }
-    };
-    
-    const marker = new google.maps.Marker(markerOptions);
-    marker.wellId = well.name;
-    
-    // Guardar conteúdo do InfoWindow no marcador para o spiderfier usar
-    marker.infoContent = `
-      <div style="font-family: 'Inter', -apple-system, sans-serif; width: 240px;">
-        <div style="background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; padding: 14px; text-align: center;">
-          <div style="font-size: 0.9375rem; font-weight: 600;">${well.name}</div>
-        </div>
-        <div style="padding: 12px;">
-          <div style="display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 0.8125rem; color: #374151;">
-            ${bacia ? `<span style="color: #6b7280; font-weight: 500;">Bacia</span><span>${bacia}</span>` : ""}
-            ${campo ? `<span style="color: #6b7280; font-weight: 500;">Campo</span><span>${campo}</span>` : ""}
-            <span style="color: #6b7280; font-weight: 500;">Estado</span><span>${well.state || "N/A"}</span>
-            <span style="color: #6b7280; font-weight: 500;">Lat</span><span>${well.lat.toFixed(6)}</span>
-            <span style="color: #6b7280; font-weight: 500;">Lng</span><span>${well.lng.toFixed(6)}</span>
-          </div>
-          <button onclick="viewWellProfile('${well.name}')"
-            style="margin-top: 10px; width: 100%; padding: 7px; background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; border: none; border-radius: 4px; font-size: 0.8125rem; font-weight: 500; cursor: pointer; font-family: 'Inter', -apple-system, sans-serif;">
-            Ver Perfil
-          </button>
-        </div>
-      </div>
-    `;
-    
-    // Se spiderfier disponível, ele gerencia os cliques
-    // Senão, fallback com click listener direto
-    if (oms) {
-      oms.addMarker(marker);
-    } else {
-      marker.addListener("click", () => {
-        sharedInfoWindow.setContent(marker.infoContent);
-        sharedInfoWindow.open(map, marker);
-      });
-    }
-    
-    state.mapMarkers.push(marker);
-    bounds.extend(position);
-  });
-  
-  // Configurar evento de clique do spiderfier
-  // Abre o InfoWindow do marcador clicado (mesmo quando "spiderfied")
-  if (oms) {
-    oms.addListener("click", (marker) => {
-      sharedInfoWindow.setContent(marker.infoContent);
-      sharedInfoWindow.open(map, marker);
-    });
-  }
-  
-  // Sempre usar MarkerClusterer
-  if (window.markerClusterer) {
-    state.mapClusterer = new markerClusterer.MarkerClusterer({
-      map,
-      markers: state.mapMarkers
-    });
-    log("MarkerClusterer ativado", { markers: state.mapMarkers.length });
-  }
-  
-  if (wells.length > 1) {
-    map.fitBounds(bounds);
-    
-    const listener = google.maps.event.addListener(map, "idle", () => {
-      if (map.getZoom() > 14) {
-        map.setZoom(14);
-      }
-      google.maps.event.removeListener(listener);
-    });
-  } else {
-    map.setZoom(12);
-  }
-  
-  state.mapWellsCoordinates = wells;
-  
-  // Static Maps API tem limite de ~8192 chars na URL
-  // Acima de 150 poços o download não é viável
-  if (wells.length > 150) {
-    mapElements.downloadMapBtn.disabled = true;
-    mapElements.downloadMapBtn.title = `Download indisponível para ${wells.length} poços (limite: 150). Use print screen ou clique com botão direito no mapa.`;
-  } else {
-    mapElements.downloadMapBtn.disabled = false;
-    mapElements.downloadMapBtn.title = "Baixar imagem do mapa";
-  }
-  
-  mapElements.mapTitle.textContent = `Mapa: ${wells.length} poço(s)`;
-  
-  log("Mapa interativo exibido", { wellsCount: wells.length });
-}
-
-/**
- * Abre a aba de Perfis com o poço selecionado
- * Chamado pelo botão "Ver Perfil" no InfoWindow do mapa
- */
-function viewWellProfile(wellId) {
-  // Mudar para a aba de perfis
-  switchTab("viewer");
-  
-  // Preencher o input com o poço
-  elements.wellInput.value = wellId;
-  
-  // Tentar encontrar o poço na lista de DLIS
-  const well = state.wells.find(w => w.id === wellId);
-  if (well) {
-    state.selectedWell = well;
-    loadWellCurves(wellId);
-    log("Perfil aberto do mapa", wellId);
-  } else {
-    log("Poço não encontrado na lista DLIS (pode não ter DLIS)", wellId);
-  }
-}
-
-// ===============================================
-// MAPA - URL COM SESSÃO
-// Sempre cria sessão no banco para links limpos
-// Mantém compatibilidade com formato antigo ?wells=
-// ===============================================
-
-/**
- * Cria sessão no banco e atualiza URL com ?sid=
- */
-async function updateMapURLWithSession() {
-  try {
-    const wellIds = state.mapWells.map(w => w.id);
-    
-    // Montar filtros usados (para referência futura)
-    const filters = {};
-    if (mapElements.baciaSelect.value) {
-      filters.bacia = mapElements.baciaSelect.value;
-    }
-    if (mapElements.campoSelect.value) {
-      filters.campo = mapElements.campoSelect.value;
-    }
-    
-    // Criar sessão no banco
-    const response = await fetch(`${CONFIG.API_URL}/map-sessions`, {
-      method: "POST",
-      headers: getFetchHeaders(),
-      body: JSON.stringify({
-        wells: wellIds,
-        filters: Object.keys(filters).length > 0 ? filters : null
-      })
-    });
-    
-    if (!response.ok) {
-      throw new Error("Falha ao criar sessão");
-    }
-    
-    const data = await response.json();
-    state.currentSessionId = data.sessionId;
-    
-    // Atualizar URL do navegador (sem token, para exibição limpa)
-    const visibleURL = `/?sid=${data.sessionId}#maps`;
-    window.history.replaceState({}, "", visibleURL);
-    
-    // Gerar link compartilhável (com token)
-    const tokenPart = getTokenHashPart();
-    const shareableURL = `${window.location.origin}/?sid=${data.sessionId}#${tokenPart}maps`;
-    mapElements.generatedMapLink.value = shareableURL;
-    mapElements.mapLinkPanel.classList.remove("hidden");
-    
-    log("Sessão criada e URL atualizada", { 
-      sessionId: data.sessionId, 
-      wellCount: data.wellCount 
-    });
-    
-  } catch (error) {
-    // Fallback: usar formato antigo com ?wells= se sessão falhar
-    log("Erro ao criar sessão, usando formato antigo", error.message);
-    updateMapURLLegacy();
-  }
-}
-
-/**
- * Formato antigo de URL (fallback caso sessão falhe)
- */
-function updateMapURLLegacy() {
-  const wellIds = state.mapWells.map(w => w.id).join(",");
-  
-  const visibleURL = `/?wells=${wellIds}#maps`;
-  window.history.replaceState({}, "", visibleURL);
-  
-  const tokenPart = getTokenHashPart();
-  const shareableURL = `${window.location.origin}/?wells=${wellIds}#${tokenPart}maps`;
-  mapElements.generatedMapLink.value = shareableURL;
-  mapElements.mapLinkPanel.classList.remove("hidden");
-  
-  log("URL do mapa atualizada (formato legado)", visibleURL);
-}
-
-/**
- * NOVO: Processar parâmetro ?sid= da URL
- * Busca sessão no banco e carrega os poços
- */
-async function processSessionURLParam(sessionId) {
-  log("Processando sessão da URL", sessionId);
-  
-  switchTab("maps");
-  
-  try {
-    // Buscar sessão no banco
-    const response = await fetch(`${CONFIG.API_URL}/map-sessions/${sessionId}`, {
-      headers: getFetchHeaders()
-    });
-    
-    if (!response.ok) {
-      if (response.status === 404) {
-        showMapError("Link expirado ou inválido. A sessão não foi encontrada.");
-      } else {
-        showMapError("Erro ao carregar sessão do mapa.");
-      }
-      return;
-    }
-    
-    const data = await response.json();
-    state.currentSessionId = data.sessionId;
-    
-    log(`Sessão encontrada: ${data.wellCount} poços`, data.filters);
-    
-    // Aguardar carregamento dos poços geo se necessário
-    if (state.geoWells.length === 0) {
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
-    
-    // Adicionar poços da sessão à seleção
-    data.wells.forEach(wellId => {
-      const well = state.geoWells.find(w => w.id === wellId);
-      if (well && !state.mapWells.find(w => w.id === well.id)) {
-        state.mapWells.push(well);
-      }
-    });
-    
-    updateMapWellsDisplay();
-    
-    if (state.mapWells.length > 0) {
-      log("Gerando mapa automaticamente da sessão");
-      setTimeout(() => generateMap(), 500);
-    }
-    
-  } catch (error) {
-    log("Erro ao processar sessão", error.message);
-    showMapError("Erro ao carregar mapa compartilhado.");
-  }
-}
-
-/**
- * Compatibilidade: processar formato antigo ?wells=
- */
-async function processMapURLParams(wellsParam) {
-  log("Processando parâmetros de mapa da URL (formato legado)", wellsParam);
-  
-  switchTab("maps");
-  
-  if (state.geoWells.length === 0) {
-    await new Promise(resolve => setTimeout(resolve, 500));
-  }
-  
-  const wellIds = wellsParam.split(",");
-  wellIds.forEach(wellId => {
-    const well = state.geoWells.find(w => w.id === wellId.trim());
-    if (well && !state.mapWells.find(w => w.id === well.id)) {
-      state.mapWells.push(well);
-    }
-  });
-  
-  updateMapWellsDisplay();
-  
-  if (state.mapWells.length > 0) {
-    log("Gerando mapa automaticamente da URL");
-    setTimeout(() => generateMap(), 500);
-  }
-}
-
-// ===============================================
-// MAPA - DOWNLOAD ESTÁTICO
-// ===============================================
-
-async function downloadStaticMap() {
-  if (!state.mapWellsCoordinates || state.mapWellsCoordinates.length === 0) {
-    showMapError("Nenhuma coordenada disponível para download");
-    return;
-  }
-  
-  log("Iniciando download do mapa estático...");
-  
-  try {
-    const response = await fetch(`${CONFIG.API_URL}/static-map`, {
-      method: "POST",
-      headers: getFetchHeaders(),
-      body: JSON.stringify({ wells: state.mapWellsCoordinates })
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `HTTP ${response.status}`);
-    }
-    
-    const data = await response.json();
-    
-    if (!data.mapUrl) {
-      throw new Error("URL do mapa não retornada");
-    }
-    
-    log("URL do mapa estático obtida", data.mapUrl);
-    
-    const imgResponse = await fetch(data.mapUrl);
-    const blob = await imgResponse.blob();
-    
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `mapa_pocos_${state.mapWellsCoordinates.length}_${Date.now()}.png`;
-    link.click();
-    
-    URL.revokeObjectURL(url);
-    
-    log("Download do mapa estático concluído");
-    
-  } catch (error) {
-    console.error("Erro ao baixar mapa:", error);
-    showMapError(error.message || "Erro ao baixar mapa estático");
-  }
-}
-
-async function copyMapLink() {
-  const input = mapElements.generatedMapLink;
-  const btn = mapElements.copyMapLinkBtn;
-  
-  await navigator.clipboard.writeText(input.value);
-  
-  const originalHTML = btn.innerHTML;
-  btn.innerHTML = "✓";
-  btn.style.background = "var(--success)";
-  
-  setTimeout(() => {
-    btn.innerHTML = originalHTML;
-    btn.style.background = "";
-  }, 2000);
-  
-  log("Link do mapa copiado", input.value);
-}
-
-// ===============================================
-// ARCGIS - FUNÇÕES
-// ===============================================
-
-function showArcGISError(message) {
-  arcgisElements.errorContainer.classList.remove("hidden");
-  arcgisElements.errorText.textContent = message;
-  log("ERRO ARCGIS", message);
-}
-
-function clearArcGISError() {
-  arcgisElements.errorContainer.classList.add("hidden");
-  arcgisElements.errorText.textContent = "";
-}
-
-/**
- * Atualiza o painel lateral do ArcGIS com info dos poços selecionados
- * Chamado ao trocar para a aba ArcGIS
- */
-function updateArcGISWellInfo() {
-  const count = state.mapWells.length;
-  
-  arcgisElements.wellCount.textContent = count;
-  arcgisElements.generateBtn.disabled = count === 0;
-  
-  if (count === 0) {
-    arcgisElements.wellInfo.innerHTML = "<p class=\"placeholder-text\">Selecione poços na aba \"Mapa de Poços\" e volte aqui para visualizar no ArcGIS.</p>";
-  } else {
-    // Resumo por bacia
-    const bacias = {};
-    state.mapWells.forEach(w => {
-      const bacia = w.bacia || "Sem Bacia";
-      if (!bacias[bacia]) bacias[bacia] = 0;
-      bacias[bacia]++;
-    });
-    
-    const resumo = Object.entries(bacias).sort((a, b) => a[0].localeCompare(b[0])).map(([bacia, qty]) =>
-      `<div class="status-item"><span class="status-label">${bacia}</span><span class="status-value">${qty}</span></div>`
-    ).join("");
-    
-    arcgisElements.wellInfo.innerHTML = `
-      <div style="font-size: 0.8125rem; font-weight: 600; color: var(--gray-700); margin-bottom: 0.5rem;">${count} poço(s) selecionado(s)</div>
-      ${resumo}
-    `;
-  }
-}
-
-/**
- * Gera o mapa ArcGIS com os poços selecionados
- * Usa require() do ArcGIS JS API para carregar módulos
- */
-async function generateArcGISMap() {
-  if (state.mapWells.length === 0) {
-    showArcGISError("Selecione poços na aba \"Mapa de Poços\" primeiro");
-    return;
-  }
-  
-  clearArcGISError();
-  
-  // Mostrar loading
-  arcgisElements.generateBtn.disabled = true;
-  arcgisElements.btnText.classList.add("hidden");
-  arcgisElements.btnLoader.classList.remove("hidden");
-  
-  try {
-    // Buscar API key do servidor
-    const configResponse = await fetch(`${CONFIG.API_URL}/arcgis-config`);
-    const config = await configResponse.json();
-    
-    if (!config.apiKey) {
-      throw new Error("ArcGIS API Key não configurada no servidor");
-    }
-    
-    log("ArcGIS API Key obtida, carregando mapa...");
-    
-    // Buscar coordenadas dos poços selecionados
-    const wellNames = state.mapWells.map(w => w.id);
-    const response = await fetch(`${CONFIG.API_URL}/wells-coordinates`, {
-      method: "POST",
-      headers: getFetchHeaders(),
-      body: JSON.stringify({ wellNames })
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `HTTP ${response.status}`);
-    }
-    
-    const data = await response.json();
-    log("Coordenadas recebidas para ArcGIS", { count: data.count });
-    
-    // Mostrar container e criar div novo para o mapa
-    // (ArcGIS MapView não renderiza corretamente em divs reutilizados)
-    arcgisElements.placeholder.style.display = "none";
-    arcgisElements.mapContainer.style.cssText = "flex:1; position:relative; min-height:500px; border-radius:0.5rem; overflow:hidden;";
-    
-    // Remover div de mapa anterior se existir
-    const oldMap = arcgisElements.mapContainer.querySelector(".arcgis-map-instance");
-    if (oldMap) oldMap.remove();
-    
-    // Criar div novo
-    const freshMapDiv = document.createElement("div");
-    freshMapDiv.className = "arcgis-map-instance";
-    freshMapDiv.style.cssText = "position:absolute; top:0; left:0; right:0; bottom:0; z-index:5;";
-    arcgisElements.mapContainer.appendChild(freshMapDiv);
-        
-    // Aguardar reflow do DOM antes de criar o MapView
-    setTimeout(() => {
-      window.require([
-        "esri/config",
-        "esri/Map",
-        "esri/views/MapView",
-        "esri/Graphic",
-        "esri/layers/GraphicsLayer",
-        "esri/layers/FeatureLayer",
-        "esri/geometry/Point",
-        "esri/symbols/SimpleMarkerSymbol",
-        "esri/PopupTemplate"
-      ], function(esriConfig, Map, MapView, Graphic, GraphicsLayer, FeatureLayer, Point, SimpleMarkerSymbol, PopupTemplate) {
-        
-        // Configurar API Key
-        esriConfig.apiKey = config.apiKey;
-        
-        // Preparar dados dos poços com info completa
-        const wells = data.wells.map(w => {
-          const fullWell = state.mapWells.find(mw => mw.id === w.name);
-          return {
-            name: w.name,
-            lat: w.lat,
-            lng: w.lng,
-            state: w.state || "N/A",
-            bacia: fullWell ? fullWell.bacia : "",
-            campo: fullWell ? fullWell.campo : ""
-          };
-        });
-        
-        // Calcular centro
-        const avgLat = wells.reduce((sum, w) => sum + w.lat, 0) / wells.length;
-        const avgLng = wells.reduce((sum, w) => sum + w.lng, 0) / wells.length;
-        
-        // Destruir mapa anterior se existir
-        if (state.arcgisMapView) {
-          state.arcgisMapView.destroy();
-          state.arcgisMapView = null;
-        }
-      
-        // Criar mapa
-        const map = new Map({
-          basemap: "arcgis/topographic"
-        });
-      
-        // Criar view
-        const view = new MapView({
-          container: freshMapDiv,
-          map: map,
-          center: [avgLng, avgLat],
-          zoom: 6
-        });
-      
-        state.arcgisMapView = view;
-      
-        // Criar graphics dos poços como source para FeatureLayer
-        const graphics = wells.map((well, i) => ({
-          geometry: {
-            type: "point",
-            longitude: well.lng,
-            latitude: well.lat
-          },
-          attributes: {
-            ObjectID: i,
-            name: well.name,
-            bacia: well.bacia,
-            campo: well.campo,
-            estado: well.state,
-            lat: well.lat,
-            lng: well.lng
-          }
-        }));
-      
-        // Popup template para clique nos poços
-        const popupTemplate = new PopupTemplate({
-          title: "{name}",
-          content: [
-            {
-              type: "fields",
-              fieldInfos: [
-                { fieldName: "bacia", label: "Bacia" },
-                { fieldName: "campo", label: "Campo" },
-                { fieldName: "estado", label: "Estado" },
-                { fieldName: "lat", label: "Latitude", format: { digitSeparator: false, places: 6 } },
-                { fieldName: "lng", label: "Longitude", format: { digitSeparator: false, places: 6 } }
-              ]
-            }
-          ]
-        });
-      
-        // Criar FeatureLayer com clustering nativo
-        const wellLayer = new FeatureLayer({
-          title: "Poços",
-          source: graphics,
-          objectIdField: "ObjectID",
-          fields: [
-            { name: "ObjectID", type: "oid" },
-            { name: "name", type: "string" },
-            { name: "bacia", type: "string" },
-            { name: "campo", type: "string" },
-            { name: "estado", type: "string" },
-            { name: "lat", type: "double" },
-            { name: "lng", type: "double" }
-          ],
-          renderer: {
-            type: "simple",
-            symbol: {
-              type: "simple-marker",
-              color: [239, 68, 68],
-              size: 8,
-              outline: { color: [255, 255, 255], width: 1.5 }
-            }
-          },
-          popupTemplate: popupTemplate,
-          // Clustering nativo do ArcGIS
-          featureReduction: {
-            type: "cluster",
-            clusterRadius: "80px",
-            clusterMinSize: "24px",
-            clusterMaxSize: "60px",
-            labelingInfo: [{
-              deconflictionStrategy: "none",
-              labelExpressionInfo: {
-                expression: "$feature.cluster_count"
-              },
-              symbol: {
-                type: "text",
-                color: "white",
-                font: { size: 12, weight: "bold" }
-              },
-              labelPlacement: "center-center"
-            }]
-          },
-          // Labels com nome do poço (visíveis no zoom alto)
-          labelingInfo: [{
-            labelExpressionInfo: { expression: "$feature.name" },
-            symbol: {
-              type: "text",
-              color: "white",
-              haloColor: [30, 58, 138, 200],
-              haloSize: 1.5,
-              font: { size: 9, weight: "bold" }
-            },
-            minScale: 150000
-          }]
-        });
-      
-        map.add(wellLayer);
-        state.arcgisLayer = wellLayer;
-      
-        // Zoom para encaixar todos os poços
-        view.when(() => {
-          if (wells.length > 1) {
-            const extent = {
-              xmin: Math.min(...wells.map(w => w.lng)),
-              ymin: Math.min(...wells.map(w => w.lat)),
-              xmax: Math.max(...wells.map(w => w.lng)),
-              ymax: Math.max(...wells.map(w => w.lat)),
-              spatialReference: { wkid: 4326 }
-            };
-            view.goTo({ target: extent, padding: { top: 40, bottom: 40, left: 40, right: 40 } });
-          }
-        });
-      
-        arcgisElements.title.textContent = `ArcGIS: ${wells.length} poço(s)`;
-        arcgisElements.apiStatus.textContent = "Conectada";
-        arcgisElements.apiStatus.style.color = "var(--success)";
-      
-        log("Mapa ArcGIS gerado", { wellsCount: wells.length });
-      });
-    }, 100); // Aguardar reflow do DOM
-    
-  } catch (error) {
-    console.error("Erro ao gerar mapa ArcGIS:", error);
-    showArcGISError(error.message || "Erro ao gerar mapa ArcGIS");
-  } finally {
-    arcgisElements.generateBtn.disabled = state.mapWells.length === 0;
-    arcgisElements.btnText.classList.remove("hidden");
-    arcgisElements.btnLoader.classList.add("hidden");
-  }
-}
-
-/**
- * Limpa o mapa ArcGIS
- */
-function clearArcGISMap() {
-  if (state.arcgisMapView) {
-    state.arcgisMapView.destroy();
-    state.arcgisMapView = null;
-    state.arcgisLayer = null;
-  }
-  
-  // Remover div de mapa criado dinamicamente
-  const oldMap = arcgisElements.mapContainer.querySelector(".arcgis-map-instance");
-  if (oldMap) oldMap.remove();
-  
-  arcgisElements.placeholder.style.display = "flex";
-  arcgisElements.mapContainer.style.cssText = "";
-  arcgisElements.title.textContent = "Mapa ArcGIS";
-  
-  clearArcGISError();
-  updateArcGISWellInfo();
-  
-  log("Mapa ArcGIS limpo");
-}
-
-/**
- * Event listeners da aba ArcGIS
- */
-function setupArcGISEventListeners() {
-  arcgisElements.generateBtn.addEventListener("click", generateArcGISMap);
-  arcgisElements.clearBtn.addEventListener("click", clearArcGISMap);
-}
-
-// ===============================================
 // INICIALIZAÇÃO
 // ===============================================
 
 document.addEventListener("DOMContentLoaded", async () => {
-  log("Iniciando aplicação v7.0");
-  
+  log("Iniciando aplicação v8.0 (modular)");
+
   loadToken();
-  
+
   if (state.accessToken) {
     log("Token carregado com sucesso", { length: state.accessToken.length });
     updateStatus("Autenticado", "success");
@@ -2150,36 +554,40 @@ document.addEventListener("DOMContentLoaded", async () => {
     log("Nenhum token disponível - modo limitado");
     updateStatus("Sem autenticação", "warning");
   }
-  
+
   setupTabNavigation();
-  
+
   const initialTab = getTabFromHash() || "viewer";
   switchTab(initialTab);
-  
+
   await checkAPIHealth();
-  
+
   await Promise.all([
     loadWells(),
     loadGeoWells()
   ]);
-  
-  setupEventListeners();
-  setupMapEventListeners();
-  setupArcGISEventListeners();
-  
+
+  // Setup de cada módulo (funções definidas nos respectivos arquivos)
+  setupEventListeners();        // profile-viewer.js
+  setupMapEventListeners();     // map-google.js
+  setupArcGISEventListeners();  // map-arcgis.js
+
   await checkURLParams();
-  
+
   // Esconder overlay de carregamento com fade
   const appOverlay = document.getElementById("appLoadingOverlay");
   if (appOverlay) {
     appOverlay.classList.add("fade-out");
     setTimeout(() => appOverlay.remove(), 300);
   }
-  
-  log("Aplicação inicializada v7.0");
+
+  log("Aplicação inicializada v8.0");
 });
 
+// ===============================================
 // EXPORTAR PARA DEBUGGING GLOBAL
+// ===============================================
+
 window.CurvesAPI = {
   state,
   CONFIG,
@@ -2194,6 +602,7 @@ window.CurvesAPI = {
   viewWellProfile
 };
 
+// Funções chamadas via onclick no HTML gerado dinamicamente
 window.removeWellFromMap = removeWellFromMap;
 window.removeBaciaFromMap = removeBaciaFromMap;
 window.removeCampoFromMap = removeCampoFromMap;
