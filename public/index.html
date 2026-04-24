@@ -17,7 +17,7 @@
                 <div class="app-loading-bar-fill"></div>
             </div>
             <p class="app-loading-text">Carregando visualizador...</p>
-            <p class="app-loading-version">v7.0</p>
+            <p class="app-loading-version">v8.1</p>
         </div>
     </div>
 
@@ -58,6 +58,15 @@
                 <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
             </svg>
             Mapa ArcGIS
+        </button>
+        <!-- NOVO v8.1: aba Geo Portal -->
+        <button class="tab-btn" data-tab="geoportal">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                <polyline points="2 17 12 22 22 17"></polyline>
+                <polyline points="2 12 12 17 22 12"></polyline>
+            </svg>
+            Geo Portal
         </button>
     </nav>
 
@@ -400,9 +409,40 @@
         </div>
     </div>
 
+    <!-- ============================================= -->
+    <!-- ABA 4: GEO PORTAL (NOVO v8.1)                 -->
+    <!-- Integração com app ArcGIS interna da K2        -->
+    <!-- Endpoint do colega - ainda em desenvolvimento  -->
+    <!-- ============================================= -->
+    <div id="geoportal-content" class="tab-content">
+        <div class="container">
+            <aside class="control-panel">
+                <h2>Geo Portal</h2>
+                <p class="placeholder-text">
+                    Em breve: seleção de poços e camadas de informação
+                    (litologia, produção, etc.) para visualização no Geo Portal.
+                </p>
+            </aside>
+
+            <main class="visualization-area">
+                <div class="viz-header">
+                    <h2>Visualização Geo Portal</h2>
+                </div>
+                <div class="placeholder">
+                    <svg width="150" height="150" viewBox="0 0 24 24" fill="none" stroke="#adb5bd" stroke-width="1">
+                        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                        <polyline points="2 17 12 22 22 17"></polyline>
+                        <polyline points="2 12 12 17 22 12"></polyline>
+                    </svg>
+                    <p>Aba em construção</p>
+                </div>
+            </main>
+        </div>
+    </div>
+
     <!-- Footer -->
     <footer class="main-footer">
-        <p>&copy; 2026 K2 Sistemas - Visualizador de Poços | Versão 7.0</p>
+        <p>&copy; 2026 K2 Sistemas - Visualizador de Poços | Versão 8.1</p>
         <button id="toggleDebug" class="btn-link">Debug</button>
     </footer>
 
@@ -420,5 +460,6 @@
     <script src="profile-viewer.js"></script>
     <script src="map-google.js"></script>
     <script src="map-arcgis.js"></script>
+    <script src="geoportal.js"></script>
 </body>
 </html>

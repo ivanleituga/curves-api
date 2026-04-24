@@ -1,15 +1,16 @@
 // ===============================================
 // K2 SISTEMAS - VISUALIZADOR DE POÇOS
-// Versão 8.0 - Modular
+// Versão 8.1 - Modular
 //
 // Estrutura de arquivos:
 //   app.js              → Core: estado, config, DOM, token, abas, utils, init
 //   profile-viewer.js   → Aba Perfis: curvas, geração de perfil, imagem
 //   map-google.js       → Aba Google Maps: marcadores, clusters, sessões
 //   map-arcgis.js       → Aba ArcGIS: FeatureLayer, clustering nativo
+//   geoportal.js        → Aba Geo Portal: integração com app ArcGIS K2
 //
 // Ordem de carregamento no HTML:
-//   app.js → profile-viewer.js → map-google.js → map-arcgis.js
+//   app.js → profile-viewer.js → map-google.js → map-arcgis.js → geoportal.js
 // ===============================================
 
 // ===============================================
@@ -128,7 +129,8 @@ const tabElements = {
   tabButtons: document.querySelectorAll(".tab-btn"),
   viewerContent: document.getElementById("viewer-content"),
   mapsContent: document.getElementById("maps-content"),
-  arcgisContent: document.getElementById("arcgis-content")
+  arcgisContent: document.getElementById("arcgis-content"),
+  geoportalContent: document.getElementById("geoportal-content")  // NOVO v8.1
 };
 
 // ===============================================
@@ -218,7 +220,8 @@ function getFetchHeaders() {
 }
 
 function getTokenHashPart() {
-  return state.accessToken ? `token=${state.accessToken}&` : "";
+  return state.accessToken ?
+    `token=${state.accessToken}&` : "";
 }
 
 // ===============================================
@@ -227,6 +230,8 @@ function getTokenHashPart() {
 
 function getTabFromHash() {
   const hash = window.location.hash;
+  // Testar "geoportal" antes de "arcgis" porque "arcgis" é substring comum
+  if (hash.includes("geoportal")) return "geoportal";
   if (hash.includes("arcgis")) return "arcgis";
   if (hash.includes("maps")) return "maps";
   if (hash.includes("viewer")) return "viewer";
@@ -242,10 +247,13 @@ function switchTab(tabName) {
     btn.classList.toggle("active", btn.dataset.tab === tabName);
   });
 
+  // Esconder todas as abas
   tabElements.viewerContent.classList.remove("active");
   tabElements.mapsContent.classList.remove("active");
   tabElements.arcgisContent.classList.remove("active");
+  tabElements.geoportalContent.classList.remove("active");  // NOVO v8.1
 
+  // Mostrar a aba selecionada
   if (tabName === "viewer") {
     tabElements.viewerContent.classList.add("active");
   } else if (tabName === "maps") {
@@ -253,6 +261,8 @@ function switchTab(tabName) {
   } else if (tabName === "arcgis") {
     tabElements.arcgisContent.classList.add("active");
     updateArcGISWellInfo();
+  } else if (tabName === "geoportal") {                      // NOVO v8.1
+    tabElements.geoportalContent.classList.add("active");
   }
 
   const currentSearch = window.location.search;
@@ -543,7 +553,7 @@ function handleKeyPress(e) {
 // ===============================================
 
 document.addEventListener("DOMContentLoaded", async () => {
-  log("Iniciando aplicação v8.0 (modular)");
+  log("Iniciando aplicação v8.1 (modular)");
 
   loadToken();
 
@@ -568,9 +578,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   ]);
 
   // Setup de cada módulo (funções definidas nos respectivos arquivos)
-  setupEventListeners();        // profile-viewer.js
-  setupMapEventListeners();     // map-google.js
-  setupArcGISEventListeners();  // map-arcgis.js
+  setupEventListeners();           // profile-viewer.js
+  setupMapEventListeners();        // map-google.js
+  setupArcGISEventListeners();     // map-arcgis.js
+  setupGeoPortalEventListeners();  // geoportal.js (NOVO v8.1)
 
   await checkURLParams();
 
@@ -581,7 +592,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     setTimeout(() => appOverlay.remove(), 300);
   }
 
-  log("Aplicação inicializada v8.0");
+  log("Aplicação inicializada v8.1");
 });
 
 // ===============================================
