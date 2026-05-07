@@ -17,7 +17,7 @@
                 <div class="app-loading-bar-fill"></div>
             </div>
             <p class="app-loading-text">Carregando visualizador...</p>
-            <p class="app-loading-version">v8.1</p>
+            <p class="app-loading-version">v8.2</p>
         </div>
     </div>
 
@@ -410,31 +410,92 @@
     </div>
 
     <!-- ============================================= -->
-    <!-- ABA 4: GEO PORTAL (NOVO v8.1)                 -->
-    <!-- Integração com app ArcGIS interna da K2        -->
-    <!-- Endpoint do colega - ainda em desenvolvimento  -->
+    <!-- ABA 4: GEO PORTAL (NOVO v8.1)                  -->
+    <!-- Integração com app ArcGIS interna da K2         -->
+    <!-- Endpoint do colega - ainda em desenvolvimento   -->
     <!-- ============================================= -->
     <div id="geoportal-content" class="tab-content">
         <div class="container">
             <aside class="control-panel">
                 <h2>Geo Portal</h2>
-                <p class="placeholder-text">
-                    Em breve: seleção de poços e camadas de informação
-                    (litologia, produção, etc.) para visualização no Geo Portal.
-                </p>
+
+                <!-- Poços selecionados -->
+                <div class="form-group">
+                    <label>Poços Selecionados <span id="geoPortalWellCount">(0)</span></label>
+                    <div id="geoPortalWellsList" class="map-wells-list">
+                        <div class="placeholder-text">Nenhum poço selecionado</div>
+                    </div>
+                </div>
+
+                <!-- Adicionar poço (reaproveita state.geoWells) -->
+                <div class="form-group">
+                    <label for="geoPortalWellInput">Adicionar Poço</label>
+                    <div class="input-with-button">
+                        <input
+                            type="text"
+                            id="geoPortalWellInput"
+                            list="geoportal-wells-datalist"
+                            placeholder="Digite o nome do poço..."
+                            autocomplete="off"
+                        >
+                        <button type="button" id="geoPortalAddWellBtn" class="btn-add" title="Adicionar">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                        </button>
+                    </div>
+                    <datalist id="geoportal-wells-datalist"></datalist>
+                </div>
+
+                <!-- Botão gerar -->
+                <button type="button" id="geoPortalGenerateBtn" class="btn-generate" disabled>
+                    <span id="geoPortalBtnText">Gerar Visualização ArcGIS</span>
+                    <span id="geoPortalBtnLoader" class="loader hidden"></span>
+                </button>
+
+                <!-- Botão limpar -->
+                <button type="button" id="geoPortalClearBtn" class="btn-secondary">
+                    Limpar Seleção
+                </button>
+
+                <!-- Status -->
+                <div class="status-panel">
+                    <h3>Status</h3>
+                    <div class="status-item">
+                        <span class="status-label">Poços:</span>
+                        <span id="geoPortalStatusWells" class="status-value">0</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Endpoint:</span>
+                        <span class="status-value" style="color: var(--warning);">🧪 Mock</span>
+                    </div>
+                </div>
+
+                <!-- Erro -->
+                <div id="geoPortalErrorContainer" class="error-container hidden">
+                    <div class="error-message">
+                        <strong>Erro:</strong>
+                        <span id="geoPortalErrorText"></span>
+                    </div>
+                </div>
             </aside>
 
             <main class="visualization-area">
                 <div class="viz-header">
-                    <h2>Visualização Geo Portal</h2>
+                    <h2 id="geoPortalTitle">Visualização Geo Portal</h2>
                 </div>
-                <div class="placeholder">
-                    <svg width="150" height="150" viewBox="0 0 24 24" fill="none" stroke="#adb5bd" stroke-width="1">
-                        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-                        <polyline points="2 17 12 22 22 17"></polyline>
-                        <polyline points="2 12 12 17 22 12"></polyline>
-                    </svg>
-                    <p>Aba em construção</p>
+
+                <div id="geoPortalContainer" class="geoportal-container">
+                    <div id="geoPortalPlaceholder" class="placeholder">
+                        <svg width="150" height="150" viewBox="0 0 24 24" fill="none" stroke="#adb5bd" stroke-width="1">
+                            <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                            <polyline points="2 17 12 22 22 17"></polyline>
+                            <polyline points="2 12 12 17 22 12"></polyline>
+                        </svg>
+                        <p>Selecione poços e clique em "Gerar Visualização ArcGIS"</p>
+                    </div>
+                    <iframe id="geoPortalFrame" src="about:blank" style="display: none;" title="Visualização Geo Portal"></iframe>
                 </div>
             </main>
         </div>
@@ -442,7 +503,7 @@
 
     <!-- Footer -->
     <footer class="main-footer">
-        <p>&copy; 2026 K2 Sistemas - Visualizador de Poços | Versão 8.1</p>
+        <p>&copy; 2026 K2 Sistemas - Visualizador de Poços | Versão 8.2</p>
         <button id="toggleDebug" class="btn-link">Debug</button>
     </footer>
 
