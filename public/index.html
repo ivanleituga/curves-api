@@ -17,7 +17,7 @@
                 <div class="app-loading-bar-fill"></div>
             </div>
             <p class="app-loading-text">Carregando visualizador...</p>
-            <p class="app-loading-version">v8.2</p>
+            <p class="app-loading-version">v8.3</p>
         </div>
     </div>
 
@@ -419,7 +419,7 @@
             <aside class="control-panel">
                 <h2>Geo Portal</h2>
 
-                <!-- Poços selecionados -->
+                <!-- Poços selecionados (sidebar hierárquica) -->
                 <div class="form-group">
                     <label>Poços Selecionados <span id="geoPortalWellCount">(0)</span></label>
                     <div id="geoPortalWellsList" class="map-wells-list">
@@ -427,7 +427,7 @@
                     </div>
                 </div>
 
-                <!-- Adicionar poço (reaproveita state.geoWells) -->
+                <!-- Adicionar poço individual (reaproveita state.geoWells) -->
                 <div class="form-group">
                     <label for="geoPortalWellInput">Adicionar Poço</label>
                     <div class="input-with-button">
@@ -446,6 +446,39 @@
                         </button>
                     </div>
                     <datalist id="geoportal-wells-datalist"></datalist>
+                </div>
+
+                <!-- Filtro por Bacia / Campo (replicado da aba Mapas) -->
+                <div class="form-group filter-section">
+                    <label>Adicionar por Bacia / Campo</label>
+
+                    <div class="filter-card">
+                        <div class="filter-field">
+                            <span class="filter-field-label">Bacia</span>
+                            <select id="geoPortalBaciaSelect" class="form-select">
+                                <option value="">Selecione uma bacia...</option>
+                            </select>
+                        </div>
+                        <div class="filter-field">
+                            <span class="filter-field-label">Campo</span>
+                            <select id="geoPortalCampoSelect" class="form-select" disabled>
+                                <option value="">Todos os campos</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="filter-footer">
+                        <span id="geoPortalFilterCount" class="filter-count">
+                            Selecione uma bacia
+                        </span>
+                        <button type="button" id="geoPortalAddByFilterBtn" class="btn-add-filter" disabled>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                            Adicionar
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Botão gerar -->
@@ -503,7 +536,7 @@
 
     <!-- Footer -->
     <footer class="main-footer">
-        <p>&copy; 2026 K2 Sistemas - Visualizador de Poços | Versão 8.2</p>
+        <p>&copy; 2026 K2 Sistemas - Visualizador de Poços | Versão 8.3</p>
         <button id="toggleDebug" class="btn-link">Debug</button>
     </footer>
 
