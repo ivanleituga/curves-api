@@ -10,8 +10,13 @@
 //   3. Frontend chama POST /api/geoportal/sessions com { wells }
 //   4. Backend salva sessão no banco e retorna { sid }
 //   5. Frontend monta URL com SID e joga no iframe
-//   6. Página de destino (mock atual ou app do Flávio) consulta
+//   6. Página de destino (app do Flávio) consulta
 //      GET /api/geoportal/sessions/:sid pra recuperar os poços
+//
+// FEATURE FLAG (GEOPORTAL_REAL_URL no .env do backend):
+//   - Se configurada: iframe aponta pra URL real do Flávio
+//   - Se não: mostra mensagem amigável "em integração" no painel direito
+//   O frontend descobre isso via GET /api/geoportal-config no setup.
 //
 // CONTRATO COM /api/geoportal/sessions:
 //   POST: { wells: [{ name, lat, lng }, ...] }
@@ -20,7 +25,7 @@
 // PENDÊNCIA (registrada na memória do projeto):
 //   A lógica de filtros e sidebar hierárquica é praticamente
 //   idêntica à de map-google.js. Quando for fazer a refatoração
-//   geral do server.js, extrair pra um módulo compartilhado
+//   geral do frontend, extrair pra um módulo compartilhado
 //   (wells-selector.js).
 //
 // Depende de: app.js (state.geoWells, CONFIG, log, getFetchHeaders)
@@ -33,7 +38,9 @@
 
 const geoPortalState = {
   wells: [],         // Poços selecionados (objetos completos do state.geoWells)
-  currentUrl: null   // URL da última visualização gerada
+  currentUrl: null,  // URL da última visualização gerada
+  realUrl: null      // URL real do Flávio (vem do /api/geoportal-config).
+  // Se null, mostra mensagem amigável em vez de gerar.
 };
 
 // ===============================================
@@ -62,6 +69,7 @@ const geoPortalElements = {
 
   // Status
   statusWells: document.getElementById("geoPortalStatusWells"),
+  statusEndpoint: document.getElementById("geoPortalStatusEndpoint"),
 
   // Visualização (painel direito)
   container: document.getElementById("geoPortalContainer"),
@@ -375,6 +383,14 @@ function updateGeoPortalGenerateButton() {
 
 async function generateGeoPortalVisualization() {
   clearGeoPortalError();
+
+  // Se a feature flag não está configurada (Flávio ainda não entregou),
+  // mostra mensagem amigável e não chama o backend.
+  if (!geoPortalState.realUrl) {
+    showGeoPortalUnavailable();
+    return;
+  }
+
   showGeoPortalLoading();
 
   // Monta payload conforme contrato com /api/geoportal/sessions
@@ -406,11 +422,10 @@ async function generateGeoPortalVisualization() {
       throw new Error("Resposta sem SID");
     }
 
-    // Monta URL do iframe.
-    // Hoje aponta pro mock interno. Quando o endpoint real do Flávio
-    // estiver pronto, basta trocar essa linha pra URL dele.
-    // Ex: const iframeUrl = `http://swk2adm1-001.../Embutido?sid=${data.sid}`;
-    const iframeUrl = `${CONFIG.API_URL}/geoportal/mock-view?sid=${data.sid}`;
+    // Monta URL do iframe usando a URL real configurada no backend (.env).
+    // Quando o Flávio terminar a app dele e infra adicionar GEOPORTAL_REAL_URL
+    // no .env, essa URL aponta automaticamente pra app dele.
+    const iframeUrl = `${geoPortalState.realUrl}?sid=${data.sid}`;
 
     geoPortalState.currentUrl = iframeUrl;
     showGeoPortalIframe(iframeUrl);
@@ -421,6 +436,30 @@ async function generateGeoPortalVisualization() {
   } finally {
     hideGeoPortalLoading();
   }
+}
+
+/**
+ * Mostra mensagem amigável quando GEOPORTAL_REAL_URL não está
+ * configurada no backend (Flávio ainda não entregou o endpoint dele).
+ */
+function showGeoPortalUnavailable() {
+  geoPortalElements.placeholder.innerHTML = `
+    <svg width="150" height="150" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1">
+      <circle cx="12" cy="12" r="10"></circle>
+      <line x1="12" y1="8" x2="12" y2="12"></line>
+      <line x1="12" y1="16" x2="12.01" y2="16"></line>
+    </svg>
+    <p style="color: #92400e; font-weight: 500; margin-top: 1rem;">
+      Geo Portal em integração
+    </p>
+    <p style="color: #78350f; font-size: 0.875rem; margin-top: 0.5rem; max-width: 400px; text-align: center;">
+      A visualização ArcGIS estará disponível em breve.
+      A integração com a aplicação está em fase final de desenvolvimento.
+    </p>
+  `;
+  geoPortalElements.placeholder.style.display = "flex";
+  geoPortalElements.frame.style.display = "none";
+  log("Geo Portal indisponível (GEOPORTAL_REAL_URL não configurada no backend)");
 }
 
 function showGeoPortalIframe(url) {
@@ -450,10 +489,19 @@ function clearGeoPortalSelection() {
   geoPortalElements.campoSelect.disabled = true;
   updateGeoPortalFilterCount();
 
-  // Resetar iframe
+  // Resetar iframe e placeholder (restaura o conteúdo original do placeholder,
+  // caso tenha sido substituído pela mensagem de "indisponível")
   geoPortalElements.frame.src = "about:blank";
   geoPortalElements.frame.style.display = "none";
   geoPortalElements.placeholder.style.display = "flex";
+  geoPortalElements.placeholder.innerHTML = `
+    <svg width="150" height="150" viewBox="0 0 24 24" fill="none" stroke="#adb5bd" stroke-width="1">
+      <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+      <polyline points="2 17 12 22 22 17"></polyline>
+      <polyline points="2 12 12 17 22 12"></polyline>
+    </svg>
+    <p>Selecione poços e clique em "Gerar Visualização ArcGIS"</p>
+  `;
   geoPortalElements.title.textContent = "Visualização Geo Portal";
 
   updateGeoPortalWellsDisplay();
@@ -503,6 +551,39 @@ function populateGeoPortalDatalist() {
 }
 
 // ===============================================
+// CARREGAR CONFIG DO BACKEND
+// (descobre se Geo Portal tem URL real configurada ou se mostra
+//  mensagem amigável de "em integração")
+// ===============================================
+
+async function loadGeoPortalConfig() {
+  try {
+    const response = await fetch(`${CONFIG.API_URL}/geoportal-config`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data = await response.json();
+    geoPortalState.realUrl = data.realUrl || null;
+
+    if (geoPortalState.realUrl) {
+      log("Geo Portal: URL real configurada", geoPortalState.realUrl);
+      geoPortalElements.statusEndpoint.textContent = "✅ Disponível";
+      geoPortalElements.statusEndpoint.style.color = "var(--success)";
+    } else {
+      log("Geo Portal: URL real NÃO configurada (mostrará mensagem amigável)");
+      geoPortalElements.statusEndpoint.textContent = "⚠️ Em integração";
+      geoPortalElements.statusEndpoint.style.color = "var(--warning)";
+    }
+  } catch (error) {
+    console.error("Erro ao carregar config do Geo Portal:", error);
+    // Em caso de erro, assume que não tem URL real (comportamento seguro)
+    geoPortalState.realUrl = null;
+    geoPortalElements.statusEndpoint.textContent = "❌ Erro ao verificar";
+    geoPortalElements.statusEndpoint.style.color = "var(--danger)";
+  }
+}
+
+// ===============================================
 // SETUP DE EVENT LISTENERS
 // ===============================================
 
@@ -528,6 +609,9 @@ function setupGeoPortalEventListeners() {
   // Popular datalist e filtro de bacias com os poços disponíveis
   populateGeoPortalDatalist();
   populateGeoPortalBasinFilter();
+
+  // Carregar config (feature flag - assíncrono mas não bloqueia o setup)
+  loadGeoPortalConfig();
 
   log("Geo Portal: event listeners configurados");
 }

@@ -4,9 +4,10 @@ import globals from "globals";
 export default [
   js.configs.recommended,
 
-  // Backend (server.js) — CommonJS / Node
+  // Backend — tudo que NÃO está em public/ é Node (CommonJS)
   {
-    files: ["server.js"],
+    files: ["**/*.js"],
+    ignores: ["public/**/*.js", "node_modules/**"],
     languageOptions: {
       sourceType: "commonjs",
       globals: {
