@@ -43,7 +43,7 @@ router.get("/", async (req, res) => {
     res.json({
       status: allHealthy ? "ok" : "degraded",
       timestamp: new Date(),
-      version: "8.3",
+      version: "8.4",
       services: {
         k2API: { url: API_BASE_URL, status: k2Status },
         postgresql: {

@@ -35,7 +35,20 @@ const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static("public"));
+// Serve estáticos com cache controlado.
+// HTML não cacheia (sempre revalida no servidor pra pegar versões novas).
+// JS/CSS revalidam via ETag (Express adiciona automaticamente) - se não mudou,
+// servidor retorna 304 e navegador usa cache. Se mudou, baixa o novo.
+// Isso resolve o problema de usuário ficar com versão antiga após deploy.
+app.use(express.static("public", {
+  setHeaders: (res, path) => {
+    if (path.endsWith(".html")) {
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    } else {
+      res.setHeader("Cache-Control", "no-cache");
+    }
+  }
+}));
 app.set("trust proxy", true);
 
 /**
@@ -112,7 +125,7 @@ app.listen(PORT, () => {
     : "⚠️  Não configurado (frontend mostrará mensagem amigável)";
 
   console.log(`
-    🚀 Curves API Server v8.4 (refatorado + feature flag Geo Portal)
+    🚀 Curves API Server v8.4 (refatorado + feature flag + cache + selector compartilhado)
     ==========================================
     Servidor: http://localhost:${PORT}
     

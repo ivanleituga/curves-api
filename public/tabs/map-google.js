@@ -1,10 +1,28 @@
 // ===============================================
 // MAP-GOOGLE.JS - Aba Google Maps
 //
-// Depende de: app.js (state, mapElements, elements,
-//   CONFIG, log, showMapError, clearMapError,
-//   getFetchHeaders, getTokenHashPart, switchTab)
+// REFATORADO v8.4:
+//   Toda a lógica de filtros bacia/campo e sidebar hierárquica
+//   foi extraída pra shared/wells-selector.js (compartilhada
+//   com a aba Geo Portal). Aqui ficou só o que é específico
+//   do Google Maps: carregar API, renderizar mapa, marcadores,
+//   clusters, sessões compartilháveis.
+//
+// Depende de:
+//   - app.js (state, mapElements, elements, CONFIG, log,
+//     showMapError, clearMapError, getFetchHeaders,
+//     getTokenHashPart, switchTab)
+//   - shared/wells-selector.js (createWellsSelector)
 // ===============================================
+
+// ===============================================
+// INSTÂNCIA DO SELECTOR (filtros + sidebar)
+//
+// Criada quando setupMapEventListeners() é chamado.
+// Encapsula toda a lógica compartilhada com a aba Geo Portal.
+// ===============================================
+
+let mapSelector = null;
 
 // ===============================================
 // CARREGAR GOOGLE MAPS API
@@ -332,7 +350,8 @@ function viewWellProfile(wellId) {
 }
 
 // ===============================================
-// ADICIONAR / REMOVER POÇOS
+// ADICIONAR POÇO INDIVIDUAL
+// (a remoção delegada pro selector via callback - veja setupMapEventListeners)
 // ===============================================
 
 function addWellToMap() {
@@ -358,13 +377,24 @@ function addWellToMap() {
   state.mapWells.push(well);
   mapElements.wellInput.value = "";
 
-  updateMapWellsDisplay();
+  mapSelector.renderWellsList();
+  onMapWellsChanged();
   clearMapError();
 
   log("Poço adicionado ao mapa", well);
 }
 
-function removeWellFromMap(wellId) {
+// ===============================================
+// CALLBACKS DO SELECTOR
+// (passados como config quando criamos o mapSelector)
+// ===============================================
+
+/**
+ * Remove o marcador correspondente quando o selector remove
+ * o poço da lista. Chamado pra cada poço removido (individual
+ * ou em grupo via bacia/campo).
+ */
+function removeMapMarker(wellId) {
   const markerIndex = state.mapMarkers.findIndex(m => m.wellId === wellId);
   if (markerIndex >= 0) {
     const marker = state.mapMarkers[markerIndex];
@@ -378,59 +408,26 @@ function removeWellFromMap(wellId) {
     }
     state.mapMarkers.splice(markerIndex, 1);
   }
-
-  state.mapWells = state.mapWells.filter(w => w.id !== wellId);
-  updateMapWellsDisplay();
-  log("Poço removido do mapa", wellId);
 }
 
-function removeBaciaFromMap(bacia) {
-  const toRemove = state.mapWells.filter(w => (w.bacia || "Sem Bacia") === bacia);
-
-  toRemove.forEach(well => {
-    const markerIndex = state.mapMarkers.findIndex(m => m.wellId === well.id);
-    if (markerIndex >= 0) {
-      const marker = state.mapMarkers[markerIndex];
-      if (state.mapSpiderfier) state.mapSpiderfier.removeMarker(marker);
-      if (state.mapClusterer) state.mapClusterer.removeMarker(marker);
-      else marker.setMap(null);
-      state.mapMarkers.splice(markerIndex, 1);
-    }
-  });
-
-  state.mapWells = state.mapWells.filter(w => (w.bacia || "Sem Bacia") !== bacia);
-  updateMapWellsDisplay();
-  log(`Bacia removida: ${bacia}`, { removidos: toRemove.length, restantes: state.mapWells.length });
+/**
+ * Chamado pelo selector depois de qualquer mudança na lista
+ * de poços (add por filtro, remove por bacia/campo, etc.).
+ * Atualiza contadores e estado do botão "Gerar Mapa".
+ */
+function onMapWellsChanged() {
+  mapElements.mapStatusCount.textContent = state.mapWells.length;
+  mapElements.generateMapBtn.disabled = state.mapWells.length === 0;
 }
 
-function removeCampoFromMap(bacia, campo) {
-  const toRemove = state.mapWells.filter(w =>
-    (w.bacia || "Sem Bacia") === bacia && (w.campo || "Sem Campo") === campo
-  );
-
-  toRemove.forEach(well => {
-    const markerIndex = state.mapMarkers.findIndex(m => m.wellId === well.id);
-    if (markerIndex >= 0) {
-      const marker = state.mapMarkers[markerIndex];
-      if (state.mapSpiderfier) state.mapSpiderfier.removeMarker(marker);
-      if (state.mapClusterer) state.mapClusterer.removeMarker(marker);
-      else marker.setMap(null);
-      state.mapMarkers.splice(markerIndex, 1);
-    }
-  });
-
-  state.mapWells = state.mapWells.filter(w =>
-    !((w.bacia || "Sem Bacia") === bacia && (w.campo || "Sem Campo") === campo)
-  );
-  updateMapWellsDisplay();
-  log(`Campo removido: ${campo} (${bacia})`, { removidos: toRemove.length, restantes: state.mapWells.length });
-}
+// ===============================================
+// LIMPAR SELEÇÃO
+// ===============================================
 
 function clearMapSelection() {
   state.mapWells = [];
   state.mapWellsCoordinates = [];
   state.currentSessionId = null;
-  updateMapWellsDisplay();
 
   if (state.mapClusterer) {
     state.mapClusterer.clearMarkers();
@@ -454,220 +451,12 @@ function clearMapSelection() {
   mapElements.downloadMapBtn.disabled = true;
   mapElements.mapTitle.textContent = "Mapa de Localização";
 
-  // Resetar filtros
-  mapElements.baciaSelect.value = "";
-  mapElements.campoSelect.innerHTML = "<option value=\"\">Todos os campos</option>";
-  mapElements.campoSelect.disabled = true;
-  updateFilterCount();
+  // Selector atualiza sidebar e reseta filtros
+  mapSelector.renderWellsList();
+  mapSelector.resetFilters();
+  onMapWellsChanged();
 
   log("Seleção de mapa limpa");
-}
-
-// ===============================================
-// SIDEBAR HIERÁRQUICA (Bacia → Campo → Poços)
-// ===============================================
-
-function sanitizeId(str) {
-  return str.replace(/[^a-zA-Z0-9]/g, "_");
-}
-
-function toggleWellGroup(groupId) {
-  const items = document.getElementById(`group-${groupId}`);
-  const arrow = document.getElementById(`arrow-${groupId}`);
-
-  if (!items || !arrow) return;
-
-  if (items.style.display === "none") {
-    items.style.display = "block";
-    arrow.classList.add("expanded");
-  } else {
-    items.style.display = "none";
-    arrow.classList.remove("expanded");
-  }
-}
-
-function updateMapWellsDisplay() {
-  const count = state.mapWells.length;
-
-  mapElements.wellCount.textContent = `(${count})`;
-  mapElements.mapStatusCount.textContent = count;
-  mapElements.generateMapBtn.disabled = count === 0;
-
-  if (count === 0) {
-    mapElements.wellsList.innerHTML = "<div class=\"placeholder-text\">Nenhum poço selecionado</div>";
-    return;
-  }
-
-  // Estrutura de 3 níveis: Bacia → Campo → Poços
-  const hierarchy = {};
-  state.mapWells.forEach(well => {
-    const bacia = well.bacia || "Sem Bacia";
-    const campo = well.campo || "Sem Campo";
-    if (!hierarchy[bacia]) hierarchy[bacia] = {};
-    if (!hierarchy[bacia][campo]) hierarchy[bacia][campo] = [];
-    hierarchy[bacia][campo].push(well);
-  });
-
-  const sortedBacias = Object.keys(hierarchy).sort();
-
-  mapElements.wellsList.innerHTML = sortedBacias.map(bacia => {
-    const campos = hierarchy[bacia];
-    const baciaId = sanitizeId(bacia);
-    const baciaWellCount = Object.values(campos).reduce((sum, wells) => sum + wells.length, 0);
-    const sortedCampos = Object.keys(campos).sort();
-
-    return `
-      <div class="well-group">
-        <div class="well-group-header" onclick="toggleWellGroup('bacia-${baciaId}')">
-          <svg class="well-group-arrow" id="arrow-bacia-${baciaId}" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="9 18 15 12 9 6"></polyline>
-          </svg>
-          <span class="well-group-name">${bacia}</span>
-          <span class="well-group-count">${baciaWellCount}</span>
-          <button class="btn-remove-group" onclick="event.stopPropagation(); removeBaciaFromMap('${bacia.replace(/'/g, "\\'")}')" title="Remover bacia">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
-        </div>
-        <div class="well-group-items" id="group-bacia-${baciaId}" style="display: none;">
-          ${sortedCampos.map(campo => {
-    const campoId = sanitizeId(`${bacia}_${campo}`);
-    const campoWells = campos[campo];
-
-    return `
-              <div class="well-subgroup">
-                <div class="well-subgroup-header" onclick="toggleWellGroup('campo-${campoId}')">
-                  <svg class="well-group-arrow" id="arrow-campo-${campoId}" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="9 18 15 12 9 6"></polyline>
-                  </svg>
-                  <span class="well-subgroup-name">${campo}</span>
-                  <span class="well-subgroup-count">${campoWells.length}</span>
-                  <button class="btn-remove-group" onclick="event.stopPropagation(); removeCampoFromMap('${bacia.replace(/'/g, "\\'")}', '${campo.replace(/'/g, "\\'")}')" title="Remover campo">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <line x1="18" y1="6" x2="6" y2="18"></line>
-                      <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                  </button>
-                </div>
-                <div class="well-subgroup-items" id="group-campo-${campoId}" style="display: none;">
-                  ${campoWells.map(well => `
-                    <div class="map-well-item well-item-deep">
-                      <span class="well-label">
-                        <span class="well-marker-dot"></span>
-                        <span>${well.id}</span>
-                      </span>
-                      <button class="btn-remove" onclick="removeWellFromMap('${well.id}')" title="Remover poço">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <line x1="18" y1="6" x2="6" y2="18"></line>
-                          <line x1="6" y1="6" x2="18" y2="18"></line>
-                        </svg>
-                      </button>
-                    </div>
-                  `).join("")}
-                </div>
-              </div>
-            `;
-  }).join("")}
-        </div>
-      </div>
-    `;
-  }).join("");
-}
-
-// ===============================================
-// FILTROS POR BACIA / CAMPO
-// ===============================================
-
-function onBaciaChange() {
-  const selectedBacia = mapElements.baciaSelect.value;
-
-  mapElements.campoSelect.innerHTML = "<option value=\"\">Todos os campos</option>";
-  mapElements.campoSelect.disabled = !selectedBacia;
-
-  if (!selectedBacia) {
-    updateFilterCount();
-    return;
-  }
-
-  const campos = [...new Set(
-    state.geoWells
-      .filter(w => w.bacia === selectedBacia)
-      .map(w => w.campo)
-      .filter(c => c && c.trim() !== "")
-  )].sort();
-
-  log(`${campos.length} campos na bacia ${selectedBacia}`);
-
-  mapElements.campoSelect.innerHTML =
-    "<option value=\"\">Todos os campos</option>" +
-    campos.map(c => `<option value="${c}">${c}</option>`).join("");
-
-  updateFilterCount();
-}
-
-function updateFilterCount() {
-  const count = getFilteredWells().length;
-
-  if (mapElements.filterCount) {
-    const pinIcon = "<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z\"></path><circle cx=\"12\" cy=\"10\" r=\"3\"></circle></svg>";
-
-    if (count > 0) {
-      mapElements.filterCount.innerHTML = `${pinIcon} ${count} poço(s) encontrado(s)`;
-      mapElements.filterCount.classList.add("has-results");
-    } else {
-      mapElements.filterCount.innerHTML = "Selecione uma bacia";
-      mapElements.filterCount.classList.remove("has-results");
-    }
-  }
-
-  if (mapElements.addByFilterBtn) {
-    mapElements.addByFilterBtn.disabled = count === 0;
-  }
-}
-
-function getFilteredWells() {
-  const selectedBacia = mapElements.baciaSelect.value;
-  const selectedCampo = mapElements.campoSelect.value;
-
-  if (!selectedBacia) return [];
-
-  return state.geoWells.filter(w => {
-    if (w.bacia !== selectedBacia) return false;
-    if (selectedCampo && w.campo !== selectedCampo) return false;
-    return true;
-  });
-}
-
-function addWellsByFilter() {
-  const filteredWells = getFilteredWells();
-
-  if (filteredWells.length === 0) {
-    showMapError("Nenhum poço corresponde ao filtro selecionado");
-    return;
-  }
-
-  let added = 0;
-
-  filteredWells.forEach(well => {
-    if (!state.mapWells.find(w => w.id === well.id)) {
-      state.mapWells.push(well);
-      added++;
-    }
-  });
-
-  updateMapWellsDisplay();
-  clearMapError();
-
-  const bacia = mapElements.baciaSelect.value;
-  const campo = mapElements.campoSelect.value;
-  const filterDesc = campo ? `${campo} (${bacia})` : bacia;
-
-  log(`${added} poços adicionados pelo filtro`, {
-    filtro: filterDesc,
-    total: state.mapWells.length
-  });
 }
 
 // ===============================================
@@ -774,7 +563,8 @@ async function processSessionURLParam(sessionId) {
       }
     });
 
-    updateMapWellsDisplay();
+    mapSelector.renderWellsList();
+    onMapWellsChanged();
 
     if (state.mapWells.length > 0) {
       log("Gerando mapa automaticamente da sessão");
@@ -804,7 +594,8 @@ async function processMapURLParams(wellsParam) {
     }
   });
 
-  updateMapWellsDisplay();
+  mapSelector.renderWellsList();
+  onMapWellsChanged();
 
   if (state.mapWells.length > 0) {
     log("Gerando mapa automaticamente da URL");
@@ -886,8 +677,27 @@ async function copyMapLink() {
 // ===============================================
 
 function setupMapEventListeners() {
-  mapElements.addWellBtn.addEventListener("click", addWellToMap);
+  // Cria a instância do selector com config específica desta aba.
+  // O selector cuida de filtros, sidebar e remoções (individual e em grupo).
+  mapSelector = createWellsSelector({
+    selectedWells: state.mapWells,
+    elements: {
+      baciaSelect: mapElements.baciaSelect,
+      campoSelect: mapElements.campoSelect,
+      addByFilterBtn: mapElements.addByFilterBtn,
+      filterCount: mapElements.filterCount,
+      wellsList: mapElements.wellsList,
+      wellCount: mapElements.wellCount
+    },
+    idPrefix: "map",
+    onWellRemoved: removeMapMarker,
+    onWellsChanged: onMapWellsChanged,
+    onError: showMapError,
+    clearError: clearMapError
+  });
 
+  // Botões e inputs
+  mapElements.addWellBtn.addEventListener("click", addWellToMap);
   mapElements.wellInput.addEventListener("keypress", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -900,11 +710,27 @@ function setupMapEventListeners() {
   mapElements.downloadMapBtn.addEventListener("click", downloadStaticMap);
   mapElements.copyMapLinkBtn?.addEventListener("click", copyMapLink);
 
-  mapElements.baciaSelect.addEventListener("change", () => {
-    onBaciaChange();
-  });
-  mapElements.campoSelect.addEventListener("change", () => {
-    updateFilterCount();
-  });
-  mapElements.addByFilterBtn.addEventListener("click", addWellsByFilter);
+  // Filtros — handlers do selector
+  mapElements.baciaSelect.addEventListener("change", () => mapSelector.onBaciaChange());
+  mapElements.campoSelect.addEventListener("change", () => mapSelector.updateFilterCount());
+  mapElements.addByFilterBtn.addEventListener("click", () => mapSelector.addWellsByFilter());
+
+  // Renderização inicial (lista vazia + filtros populados)
+  mapSelector.renderWellsList();
+  mapSelector.populateBasinFilter();
 }
+
+// ===============================================
+// EXPOSIÇÃO GLOBAL
+// (onclick inline no HTML gerado dinamicamente pelo selector)
+// ===============================================
+
+// Funções "fromMap" delegam pro selector (que sabe lidar com lista,
+// callback de marcador, etc.)
+window.removeWellFromMap = (wellId) => mapSelector.removeWell(wellId);
+window.removeBaciaFromMap = (bacia) => mapSelector.removeBacia(bacia);
+window.removeCampoFromMap = (bacia, campo) => mapSelector.removeCampo(bacia, campo);
+window.toggleMapGroup = (groupId) => mapSelector.toggleGroup(groupId);
+
+// viewWellProfile permanece global (usado pelo InfoWindow do marcador)
+window.viewWellProfile = viewWellProfile;

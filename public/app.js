@@ -1,16 +1,19 @@
 // ===============================================
 // K2 SISTEMAS - VISUALIZADOR DE POÇOS
-// Versão 8.1 - Modular
+// Versão 8.4 - Modular + Selector compartilhado
 //
 // Estrutura de arquivos:
-//   app.js              → Core: estado, config, DOM, token, abas, utils, init
-//   profile-viewer.js   → Aba Perfis: curvas, geração de perfil, imagem
-//   map-google.js       → Aba Google Maps: marcadores, clusters, sessões
-//   map-arcgis.js       → Aba ArcGIS: FeatureLayer, clustering nativo
-//   geoportal.js        → Aba Geo Portal: integração com app ArcGIS K2
+//   app.js                          → Core: estado, config, DOM, token, abas, utils, init
+//   shared/wells-selector.js        → Factory de seleção de poços (filtros + sidebar)
+//                                      compartilhada entre Maps e Geo Portal
+//   tabs/profile-viewer.js          → Aba Perfis: curvas, geração de perfil, imagem
+//   tabs/map-google.js              → Aba Google Maps: marcadores, clusters, sessões
+//   tabs/map-arcgis.js              → Aba ArcGIS: FeatureLayer, clustering nativo
+//   tabs/geoportal.js               → Aba Geo Portal: integração com app ArcGIS K2
 //
 // Ordem de carregamento no HTML:
-//   app.js → profile-viewer.js → map-google.js → map-arcgis.js → geoportal.js
+//   app.js → shared/wells-selector.js → tabs/profile-viewer.js → tabs/map-google.js
+//          → tabs/map-arcgis.js → tabs/geoportal.js
 // ===============================================
 
 // ===============================================
@@ -553,7 +556,7 @@ function handleKeyPress(e) {
 // ===============================================
 
 document.addEventListener("DOMContentLoaded", async () => {
-  log("Iniciando aplicação v8.1 (modular)");
+  log("Iniciando aplicação v8.4 (modular + selector compartilhado)");
 
   loadToken();
 
@@ -578,10 +581,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   ]);
 
   // Setup de cada módulo (funções definidas nos respectivos arquivos)
-  setupEventListeners();           // profile-viewer.js
-  setupMapEventListeners();        // map-google.js
-  setupArcGISEventListeners();     // map-arcgis.js
-  setupGeoPortalEventListeners();  // geoportal.js (NOVO v8.1)
+  setupEventListeners();           // tabs/profile-viewer.js
+  setupMapEventListeners();        // tabs/map-google.js
+  setupArcGISEventListeners();     // tabs/map-arcgis.js
+  setupGeoPortalEventListeners();  // tabs/geoportal.js
 
   await checkURLParams();
 
@@ -592,11 +595,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     setTimeout(() => appOverlay.remove(), 300);
   }
 
-  log("Aplicação inicializada v8.1");
+  log("Aplicação inicializada v8.4");
 });
 
 // ===============================================
 // EXPORTAR PARA DEBUGGING GLOBAL
+// ===============================================
+// As funções específicas das abas (removeWellFromMap, etc) são
+// expostas pelos próprios arquivos em tabs/ - mantém o app.js
+// agnóstico do que cada aba faz.
 // ===============================================
 
 window.CurvesAPI = {
@@ -607,15 +614,5 @@ window.CurvesAPI = {
   log,
   clearToken,
   loadToken,
-  switchTab,
-  removeWellFromMap,
-  downloadStaticMap,
-  viewWellProfile
+  switchTab
 };
-
-// Funções chamadas via onclick no HTML gerado dinamicamente
-window.removeWellFromMap = removeWellFromMap;
-window.removeBaciaFromMap = removeBaciaFromMap;
-window.removeCampoFromMap = removeCampoFromMap;
-window.toggleWellGroup = toggleWellGroup;
-window.viewWellProfile = viewWellProfile;
