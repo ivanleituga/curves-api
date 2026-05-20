@@ -31,7 +31,8 @@
 
 const geoPortalState = {
   wells: [],         // Poços selecionados (objetos completos do state.geoWells)
-  currentUrl: null,  // URL da última visualização gerada
+  currentUrl: null,  // URL da última visualização gerada (do iframe)
+  currentSid: null,  // SID da sessão atual (usado no link compartilhável)
   realUrl: null      // URL real do Flávio (vem do /api/geoportal-config).
   // Se null, mostra mensagem amigável em vez de gerar.
 };
@@ -75,7 +76,12 @@ const geoPortalElements = {
 
   // Erro
   errorContainer: document.getElementById("geoPortalErrorContainer"),
-  errorText: document.getElementById("geoPortalErrorText")
+  errorText: document.getElementById("geoPortalErrorText"),
+
+  // Link compartilhável (espelho do mapLinkPanel da aba Mapas)
+  linkPanel: document.getElementById("geoPortalLinkPanel"),
+  generatedLink: document.getElementById("generatedGeoPortalLink"),
+  copyLinkBtn: document.getElementById("copyGeoPortalLinkBtn")
 };
 
 // ===============================================
@@ -168,10 +174,18 @@ async function generateGeoPortalVisualization() {
     }
 
     // Monta URL do iframe usando a URL real configurada no backend (.env).
-    const iframeUrl = `${geoPortalState.realUrl}?sid=${data.sid}`;
+    // NOTA: Geo Portal do Flávio usa "sessionid" como parâmetro da URL
+    // (diferente do "sid" usado no resto da aplicação). Quando ele
+    // padronizar pra "sid", trocar de volta aqui.
+    const iframeUrl = `${geoPortalState.realUrl}?sessionid=${data.sid}`;
 
     geoPortalState.currentUrl = iframeUrl;
+    geoPortalState.currentSid = data.sid;
     showGeoPortalIframe(iframeUrl);
+
+    // Atualiza a URL do navegador e mostra painel de link compartilhável
+    // (espelho do comportamento da aba Mapas)
+    updateGeoPortalURLWithSession(data.sid);
 
   } catch (error) {
     console.error("Erro ao gerar visualização Geo Portal:", error);
@@ -216,14 +230,111 @@ function showGeoPortalUnavailable() {
 }
 
 // ===============================================
-// LIMPAR SELEÇÃO
+// URL COMPARTILHÁVEL (links pra Custom GPT ou colegas)
+// Espelho de updateMapURLWithSession da aba Mapas.
 // ===============================================
+
+function updateGeoPortalURLWithSession(sid) {
+  // Atualiza a URL do navegador (sem recarregar a página)
+  // Formato: /?sid=xxx#geoportal
+  const visibleURL = `/?sid=${sid}#geoportal`;
+  window.history.replaceState({}, "", visibleURL);
+
+  // Monta URL compartilhável (com token no hash, igual aba Mapas)
+  const tokenPart = getTokenHashPart();
+  const shareableURL = `${window.location.origin}/?sid=${sid}#${tokenPart}geoportal`;
+  geoPortalElements.generatedLink.value = shareableURL;
+  geoPortalElements.linkPanel.classList.remove("hidden");
+
+  log("URL do Geo Portal atualizada com SID", { sid });
+}
+
+async function copyGeoPortalLink() {
+  const input = geoPortalElements.generatedLink;
+  const btn = geoPortalElements.copyLinkBtn;
+
+  await navigator.clipboard.writeText(input.value);
+
+  const originalHTML = btn.innerHTML;
+  btn.innerHTML = "✓";
+  btn.style.background = "var(--success)";
+
+  setTimeout(() => {
+    btn.innerHTML = originalHTML;
+    btn.style.background = "";
+  }, 2000);
+
+  log("Link do Geo Portal copiado", input.value);
+}
+
+// ===============================================
+// PROCESSAR SID DA URL (chamado pelo app.js quando ?sid=xxx#geoportal)
+// Resolve o SID, popula a seleção e gera a visualização automaticamente.
+// Espelho de processSessionURLParam da aba Mapas.
+// ===============================================
+
+async function processGeoPortalSessionURL(sid) {
+  log("Processando sessão Geo Portal da URL", sid);
+
+  switchTab("geoportal");
+
+  try {
+    const response = await fetch(`${CONFIG.API_URL}/geoportal/sessions/${sid}`, {
+      headers: getFetchHeaders()
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        showGeoPortalError("Link expirado ou inválido. A sessão não foi encontrada.");
+      } else {
+        showGeoPortalError("Erro ao carregar sessão do Geo Portal.");
+      }
+      return;
+    }
+
+    const data = await response.json();
+    log(`Sessão Geo Portal encontrada: ${data.wellCount} poços`);
+
+    // Aguardar geoWells carregar caso ainda não tenha
+    if (state.geoWells.length === 0) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    // Popular state.wells a partir dos poços da sessão.
+    // A sessão guarda { name, lat, lng } mas o selector espera os objetos
+    // completos do geoWells (com bacia, campo). Buscamos por name.
+    data.wells.forEach(sessionWell => {
+      const fullWell = state.geoWells.find(w => w.id === sessionWell.name);
+      if (fullWell && !geoPortalState.wells.find(w => w.id === fullWell.id)) {
+        geoPortalState.wells.push(fullWell);
+      }
+    });
+
+    geoPortalSelector.renderWellsList();
+    onGeoPortalWellsChanged();
+
+    if (geoPortalState.wells.length > 0) {
+      log("Gerando visualização Geo Portal automaticamente da sessão");
+      setTimeout(() => generateGeoPortalVisualization(), 500);
+    }
+
+  } catch (error) {
+    log("Erro ao processar sessão Geo Portal", error.message);
+    showGeoPortalError("Erro ao carregar Geo Portal compartilhado.");
+  }
+}
+
+
 
 function clearGeoPortalSelection() {
   geoPortalState.wells = [];
   geoPortalState.currentUrl = null;
+  geoPortalState.currentSid = null;
 
   geoPortalElements.wellInput.value = "";
+
+  // Esconder painel de link compartilhável
+  geoPortalElements.linkPanel.classList.add("hidden");
 
   // Resetar iframe e placeholder (restaura conteúdo original)
   geoPortalElements.frame.src = "about:blank";
@@ -359,6 +470,7 @@ function setupGeoPortalEventListeners() {
   // Ações principais
   geoPortalElements.generateBtn.addEventListener("click", generateGeoPortalVisualization);
   geoPortalElements.clearBtn.addEventListener("click", clearGeoPortalSelection);
+  geoPortalElements.copyLinkBtn?.addEventListener("click", copyGeoPortalLink);
 
   // Renderização inicial + popular filtros/datalist
   geoPortalSelector.renderWellsList();

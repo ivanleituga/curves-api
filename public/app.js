@@ -474,10 +474,16 @@ async function checkURLParams() {
   const curvesParam = urlParams.get("curves");
   const hasLito = urlParams.get("lito") === "true";
 
-  // Verificar se há um ID de sessão na URL (mapa)
+  // Verificar se há um ID de sessão na URL.
+  // O hash define qual aba: #geoportal → Geo Portal, senão → Mapas (default)
   const sessionId = urlParams.get("sid");
   if (sessionId) {
-    await processSessionURLParam(sessionId);
+    const hash = window.location.hash || "";
+    if (hash.includes("geoportal")) {
+      await processGeoPortalSessionURL(sessionId);
+    } else {
+      await processSessionURLParam(sessionId);
+    }
     return;
   }
 
